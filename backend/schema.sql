@@ -130,6 +130,7 @@ CREATE TABLE appointments (
   status TEXT NOT NULL DEFAULT 'given' CHECK (status IN
     ('given', 'confirmed', 'arrived', 'in_progress', 'completed', 'reported', 'delivered', 'absent', 'cancelled')),
   overbook INTEGER NOT NULL DEFAULT 0,
+  care_type TEXT NOT NULL DEFAULT 'AMB' CHECK (care_type IN ('AMB', 'INT', 'GUA')), -- ambulatorio / internado / guardia
   insurance_id INTEGER REFERENCES insurances(id) ON DELETE SET NULL,
   authorization_number TEXT,
   referring_physician TEXT,     -- médico derivante

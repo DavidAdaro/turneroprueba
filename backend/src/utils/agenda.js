@@ -25,8 +25,8 @@ export const APPOINTMENT_SELECT = `
     p.notes AS patient_notes, p.affiliate_number, p.insurance_plan,
     e.name AS equipment_name, e.modality, e.color AS equipment_color, e.ae_title,
     s.name AS study_name, s.code AS study_code, s.contrast AS study_contrast, s.preparation AS study_preparation,
-    i.name AS insurance_name, i.requires_authorization,
-    t.name AS technician_name,
+    i.name AS insurance_name, i.code AS insurance_code, i.requires_authorization,
+    t.name AS technician_name, t.email AS technician_email,
     r.status AS report_status
   FROM appointments a
   JOIN patients p ON p.id = a.patient_id

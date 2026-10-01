@@ -9,6 +9,8 @@ import { newDicomUid, nextAccessionNumber, pacsMode, simulatePacsReception } fro
 const appointments = new Hono();
 appointments.use('*', requireAuth);
 
+const CARE_TYPES = ['AMB', 'INT', 'GUA'];
+
 const getAppointment = (db, id) => db.prepare(`${APPOINTMENT_SELECT} WHERE a.id = ?`).bind(id).first();
 
 // GET /day?date=&equipment_id= → grilla de cada equipo del día.
@@ -147,8 +149,8 @@ appointments.post('/', requireRole('admin', 'reception'), async (c) => {
   const row = await db
     .prepare(
       `INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, overbook, insurance_id,
-        authorization_number, referring_physician, clinical_indication, order_received, notes, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        authorization_number, referring_physician, clinical_indication, order_received, notes, care_type, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
     )
     .bind(
       equipmentId,
@@ -164,6 +166,7 @@ appointments.post('/', requireRole('admin', 'reception'), async (c) => {
       clean(body.clinical_indication),
       toBool(body.order_received),
       clean(body.notes),
+      CARE_TYPES.includes(body.care_type) ? body.care_type : 'AMB',
       user.id
     )
     .first();
@@ -180,6 +183,7 @@ const EDITABLE = {
   order_received: toBool,
   notes: clean,
   technician_notes: clean,
+  care_type: (v) => (CARE_TYPES.includes(v) ? v : 'AMB'),
 };
 
 appointments.patch('/:id', async (c) => {

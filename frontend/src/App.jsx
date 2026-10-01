@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext';
 import Layout, { NAV, homeFor } from './components/Layout';
 import Login from './pages/Login';
 import Agenda from './pages/Agenda';
+import Turnero from './pages/Turnero';
 import Reception from './pages/Reception';
 import Technicians from './pages/Technicians';
 import Reports from './pages/Reports';
@@ -16,6 +17,7 @@ import Stats from './pages/Stats';
 import Settings from './pages/Settings';
 
 const PAGES = {
+  '/turnero': Turnero,
   '/turnos': Agenda,
   '/recepcion': Reception,
   '/tecnicos': Technicians,

@@ -25,6 +25,15 @@ misma modalidad) y una admisión se puede anular. Cada paso queda en el
 
 ## Funcionalidades
 
+- **Turnero del día** (pantalla principal, estilo planilla de Visual Medica):
+  una fila por turno coloreada según el estado, con Centro y tipo de
+  atención (AMB / INT / GUA), N° de turno, N° de ficha (N° de acceso, en rojo
+  mientras el paciente no fue admitido), paciente, documento, fecha de
+  nacimiento, edad, estudio (en naranja si lleva contraste), modalidad,
+  aseguradora (con aviso de orden o autorización faltante), hora de turno,
+  arribo, inicio, fin y usuario. Íconos por fila: cancelar, admitir,
+  confirmar, ver informe, WhatsApp, avanzar al siguiente paso, enviar a
+  PACS, detalle, ausente, anular admisión, historial y visor (VM).
 - **Agenda por equipo** (RM, TC, Eco, Rx, Mamo, …): vista de todos los
   equipos lado a lado o de uno solo; horarios libres, ocupados, bloqueados,
   sobreturnos y cancelados; búsqueda de turnos por DNI, apellido o N° de acceso.
@@ -76,7 +85,7 @@ cd backend
 npm install
 cp .dev.vars.example .dev.vars        # y completar los secretos
 npm run db:schema:local
-npm run db:seed:local
+npm run db:seed:local                  # incluye turnos de ejemplo para hoy
 npm run dev                            # http://localhost:8788
 
 # Frontend (otra terminal)

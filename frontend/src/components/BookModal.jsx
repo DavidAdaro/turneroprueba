@@ -21,6 +21,7 @@ export default function BookModal({ equipment, date, startTime, overbook: initia
     order_received: false,
     notes: '',
     overbook: initialOverbook,
+    care_type: 'AMB',
   });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -86,6 +87,13 @@ export default function BookModal({ equipment, date, startTime, overbook: initia
                       {i.requires_authorization ? ' (requiere autorización)' : ''}
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field label="Tipo de atención">
+                <select className="input" value={form.care_type} onChange={set('care_type')}>
+                  <option value="AMB">Ambulatorio</option>
+                  <option value="INT">Internado</option>
+                  <option value="GUA">Guardia</option>
                 </select>
               </Field>
               <Field label="Médico derivante">

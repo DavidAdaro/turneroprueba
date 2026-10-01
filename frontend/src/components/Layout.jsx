@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   BarChart3,
   CalendarDays,
+  LayoutList,
   ClipboardCheck,
   FileText,
   LogOut,
@@ -16,7 +17,8 @@ import { ROLE_LABELS } from '../utils';
 
 // Menú en el orden del flujo: turno → recepción → técnico → informe → entrega.
 export const NAV = [
-  { to: '/turnos', label: 'Turnos', icon: CalendarDays, roles: ['admin', 'reception'] },
+  { to: '/turnero', label: 'Turnero del día', icon: LayoutList, roles: ['admin', 'reception', 'technician', 'radiologist'] },
+  { to: '/turnos', label: 'Dar turnos', icon: CalendarDays, roles: ['admin', 'reception'] },
   { to: '/recepcion', label: 'Recepción', icon: ClipboardCheck, roles: ['admin', 'reception'] },
   { to: '/tecnicos', label: 'Técnicos', icon: ScanLine, roles: ['admin', 'technician'] },
   { to: '/informes', label: 'Informes', icon: FileText, roles: ['admin', 'radiologist'] },
