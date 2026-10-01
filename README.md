@@ -77,13 +77,16 @@ npm install
 cp .dev.vars.example .dev.vars        # y completar los secretos
 npm run db:schema:local
 npm run db:seed:local
-npm run dev                            # http://localhost:8787
+npm run dev                            # http://localhost:8788
 
 # Frontend (otra terminal)
 cd frontend
 npm install
-npm run dev                            # http://localhost:5173
+npm run dev                            # http://localhost:5180
 ```
+
+Usa los puertos 8788 (backend) y 5180 (frontend) para no chocar con
+`organizacionturnos` (InPatient), que usa 8787 y 5173; se pueden correr los dos a la vez.
 
 Usuarios de prueba (contraseña `turnero123`):
 

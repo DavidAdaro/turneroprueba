@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --port 8788",
     "deploy": "wrangler deploy",
     "test": "node --test test/*.test.js",
     "db:schema:local": "wrangler d1 execute turnero-db --local --file=./schema.sql",
