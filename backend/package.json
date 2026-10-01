@@ -1,0 +1,23 @@
+{
+  "name": "turnero-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.js",
+    "db:schema:local": "wrangler d1 execute turnero-db --local --file=./schema.sql",
+    "db:seed:local": "wrangler d1 execute turnero-db --local --file=./seed.sql",
+    "db:schema:remote": "wrangler d1 execute turnero-db --remote --file=./schema.sql",
+    "db:seed:remote": "wrangler d1 execute turnero-db --remote --file=./seed.sql"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

@@ -1,1 +1,151 @@
-# turneroprueba
+# Mini RIS · Turnero de Imágenes (prueba)
+
+Turnero para el **sector de Diagnóstico por Imágenes**, inspirado en
+sistemas como Visual Medica, que cubre el circuito completo de un RIS
+básico: **turno → recepción/admisión → técnico (worklist) → PACS → informe
+→ entrega**. Es un proyecto **de prueba**: la recepción en el PACS se
+simula por defecto, pero la integración real ya tiene sus endpoints.
+
+## Flujo y estados del turno
+
+| Paso | Quién | Estado | Qué pasa |
+| --- | --- | --- | --- |
+| Dar turno | Recepción | `given` (Dado) | Por equipo y horario libre. El estudio se filtra por la modalidad del equipo y define la duración. Valida superposición, horario de atención, bloqueos y que el paciente no tenga otro turno a la misma hora. Sobreturnos permitidos. |
+| Confirmar | Recepción | `confirmed` | Desde el detalle o desde Recordatorios (WhatsApp). |
+| Admitir | Recepción | `arrived` (Admitido) | Solo turnos del día. Exige **orden médica** y, si la obra social lo requiere, **N° de autorización**. Genera el **N° de acceso** (`AAAAMMDD-NNNN`) y el **StudyInstanceUID** DICOM. |
+| Ingresar a sala | Técnico | `in_progress` (En sala) | Queda registrado el técnico. |
+| Finalizar estudio | Técnico | `completed` (Realizado) | Observaciones técnicas (contraste, incidencias). Se envía al PACS (simulado) o se espera el aviso del PACS real. |
+| Informar y firmar | Médico informante | `reported` (Informado) | Técnica, hallazgos y conclusión; ve estudios previos del paciente y el link al visor. Firmado no se puede editar. |
+| Entregar | Recepción | `delivered` (Entregado) | Registra quién retiró. Informe imprimible en A4. |
+
+Salidas: `absent` (Ausente) y `cancelled` (Cancelado, con motivo). Un turno
+pendiente se puede **reprogramar** (otra fecha/hora u otro equipo de la
+misma modalidad) y una admisión se puede anular. Cada paso queda en el
+**historial del turno** (quién y cuándo).
+
+## Funcionalidades
+
+- **Agenda por equipo** (RM, TC, Eco, Rx, Mamo, …): vista de todos los
+  equipos lado a lado o de uno solo; horarios libres, ocupados, bloqueados,
+  sobreturnos y cancelados; búsqueda de turnos por DNI, apellido o N° de acceso.
+- **Horarios de atención** por equipo (franjas por día de la semana y
+  duración del turno) y **bloqueos** (mantenimiento, feriados, por equipo o
+  de todo el centro, día entero o por horas; avisa cuántos turnos quedan
+  adentro para reprogramar).
+- **Pacientes**: DNI (también Patient ID DICOM), cobertura, plan, afiliado,
+  peso, observaciones clínicas (alergias, marcapasos, claustrofobia) que se
+  muestran en cada paso. Aviso al dar turno de RM si las observaciones
+  mencionan marcapasos/implantes.
+- **Catálogo de estudios** con código de nomenclador, modalidad, duración,
+  contraste, **preparación** para el paciente y valores particular / por
+  obra social (con coseguro).
+- **Recordatorios por WhatsApp** (link `wa.me` con mensaje armado desde una
+  plantilla que incluye la preparación del estudio). No necesita API.
+- **Estadísticas**: turnos, realizados, ausentismo, espera promedio en sala,
+  tiempo hasta el informe, por equipo, por cobertura y por día.
+- **Facturación por obra social**: estudios realizados del período con su
+  valor y autorización, agrupados por cobertura, exportable a CSV.
+- **Integración PACS / modalidades** (ver abajo).
+
+## Roles
+
+| Rol | Ve |
+| --- | --- |
+| Administrador (`admin`) | Todo, incluida Configuración (equipos, horarios, estudios, valores, obras sociales, bloqueos, usuarios, datos del centro). |
+| Recepción (`reception`) | Turnos, Recepción, Entrega, Pacientes, Recordatorios, Estadísticas. |
+| Técnico (`technician`) | Worklist de técnicos y Pacientes. |
+| Médico informante (`radiologist`) | Informes y Pacientes. Su matrícula sale en el informe firmado. |
+
+## Stack
+
+Igual que `organizacionturnos`:
+
+- **backend/**: Cloudflare Worker con [Hono](https://hono.dev) + D1
+  (SQLite). JWT (`hono/jwt`) + `bcryptjs`.
+- **frontend/**: React + Vite + React Router + Tailwind v4, desplegado como
+  Worker de assets estáticos.
+
+Fechas y horas se guardan como hora local del centro
+(`America/Argentina/Buenos_Aires`).
+
+## Correr en local
+
+```bash
+# Backend
+cd backend
+npm install
+cp .dev.vars.example .dev.vars        # y completar los secretos
+npm run db:schema:local
+npm run db:seed:local
+npm run dev                            # http://localhost:8787
+
+# Frontend (otra terminal)
+cd frontend
+npm install
+npm run dev                            # http://localhost:5173
+```
+
+Usuarios de prueba (contraseña `turnero123`):
+
+| Email | Rol |
+| --- | --- |
+| admin@turnero.test | Administrador |
+| recepcion@turnero.test | Recepción |
+| tecnico@turnero.test | Técnico |
+| informante@turnero.test | Médico informante |
+
+Tests de la lógica de agenda: `cd backend && npm test`.
+
+## Despliegue en Cloudflare
+
+```bash
+cd backend
+npx wrangler d1 create turnero-db      # copiar el database_id a wrangler.jsonc
+npm run db:schema:remote && npm run db:seed:remote
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put INTEGRATION_API_KEY
+# CORS_ORIGIN en wrangler.jsonc = URL del frontend
+npm run deploy
+
+cd ../frontend
+VITE_API_URL=https://<backend>.workers.dev/api npm run build
+npx wrangler deploy
+```
+
+Antes de usarlo con datos reales: cambiar las contraseñas de los usuarios
+de prueba (o no cargar `seed.sql`).
+
+## Integración con equipos y PACS
+
+Endpoints servidor a servidor, autenticados con el header `X-API-Key`
+(= secreto `INTEGRATION_API_KEY`):
+
+- `GET /api/integration/worklist?ae_title=RM15T&date=AAAA-MM-DD` —
+  **Modality Worklist** en JSON con atributos DICOM (`AccessionNumber`,
+  `StudyInstanceUID`, `PatientID`, `PatientName`, `ScheduledProcedureStepSequence`,
+  …) de los pacientes admitidos/en sala de ese equipo. Pensado para que un
+  broker MWL (plugin de Orthanc, dcm4chee, etc.) la sirva a la modalidad, así
+  el estudio llega al PACS ya con el N° de acceso y el UID del RIS.
+- `POST /api/integration/study-received` con
+  `{ "accession_number", "study_instance_uid", "image_count" }` — el PACS
+  avisa que recibió el estudio; si el técnico no lo había finalizado, pasa a
+  Realizado.
+
+Modo PACS (`PACS_MODE`, variable del Worker):
+
+- sin definir / `simulated` (por defecto, **prueba**): al finalizar el
+  estudio se simula que las imágenes llegaron al PACS.
+- `external`: el turno queda con PACS pendiente hasta el aviso de
+  `study-received`.
+
+Para abrir las imágenes desde el RIS, cargar en Configuración → Centro la
+URL del visor, p. ej. `https://pacs.ejemplo.com/ohif/viewer?StudyInstanceUIDs={uid}`.
+
+## Pendiente / fuera de alcance de la prueba
+
+- Turnos online para pacientes y envío automático de recordatorios
+  (hoy es un link de WhatsApp que envía la recepción).
+- MWL DICOM nativa (C-FIND) y HL7: se expone JSON para un broker.
+- Plantillas de informe por estudio, dictado y firma digital con
+  certificado.
+- Multi-sede / multi-institución.
