@@ -87,47 +87,6 @@ INSERT INTO patients (dni, first_name, last_name, birth_date, sex, phone, email,
   ('18777888', 'Carlos', 'Rodríguez', '1955-11-05', 'M', '5493515554444', NULL, 5, NULL, '0034567', 92, 'Marcapasos (no apto RM)'),
   ('35999000', 'Ana', 'Martínez', '1990-06-18', 'F', '5493515555555', NULL, 4, 'SMG20', '80012345', 70, 'Claustrofobia leve');
 
--- Más pacientes de ejemplo.
-INSERT INTO patients (dni, first_name, last_name, birth_date, sex, phone, insurance_id, affiliate_number, weight_kg) VALUES
-  ('32504614', 'Cynthia Yamila', 'Callari', '1986-06-09', 'F', '5492615550001', 4, '80055501', 61),
-  ('21374803', 'Walter Horacio', 'Torre', '1969-12-17', 'M', '5492615550002', 5, '0045501', 84),
-  ('14677376', 'Esther Rosalia', 'Castro', '1961-10-05', 'F', '5492615550003', 3, '150555000301', 70),
-  ('34952803', 'Francisco Andrés', 'Romero', '1989-09-19', 'M', '5492615550004', 5, '0045502', 79),
-  ('27496639', 'Viviana', 'Gómez', '1979-06-03', 'F', '5492615550005', 1, NULL, 66),
-  ('11105214', 'Carmelo Oscar', 'Módica', '1953-10-17', 'M', '5492615550006', 5, '0045503', 90),
-  ('5996591', 'Dora Edith', 'Gatica', '1950-10-06', 'F', '5492615550007', 5, '0045504', 58),
-  ('39767703', 'María Florencia', 'Hansen', '1996-03-26', 'F', '5492615550008', 5, '0045505', 55);
-
--- Turnos de HOY (fecha local Argentina = UTC-3) en distintos estados, para
--- ver el turnero lleno al entrar. Los timestamps se guardan en UTC.
-INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, status, insurance_id, order_received,
-  referring_physician, accession_number, study_instance_uid, pacs_status, image_count, technician_id,
-  arrived_at, started_at, completed_at, care_type, created_by)
-SELECT 1, p.id, v.study_id, date('now', '-3 hours'), v.t, v.e, v.status, p.insurance_id, v.ord, 'Dr. Ejemplo',
-  CASE WHEN v.arr IS NULL THEN NULL ELSE strftime('%Y%m%d', 'now', '-3 hours') || '-' || v.acc END,
-  CASE WHEN v.arr IS NULL THEN NULL ELSE '2.25.' || v.acc || '1234567890123456789' END,
-  CASE WHEN v.fin IS NULL THEN 'pending' ELSE 'received' END,
-  CASE WHEN v.fin IS NULL THEN NULL ELSE v.imgs END,
-  CASE WHEN v.ini IS NULL THEN NULL ELSE 3 END,
-  CASE WHEN v.arr IS NULL THEN NULL ELSE datetime(date('now', '-3 hours') || ' ' || v.arr, '+3 hours') END,
-  CASE WHEN v.ini IS NULL THEN NULL ELSE datetime(date('now', '-3 hours') || ' ' || v.ini, '+3 hours') END,
-  CASE WHEN v.fin IS NULL THEN NULL ELSE datetime(date('now', '-3 hours') || ' ' || v.fin, '+3 hours') END,
-  v.care, 2
-FROM (
-  WITH v(dni, study_id, t, e, status, ord, acc, arr, ini, fin, imgs, care) AS (VALUES
-  ('32504614', 3, '08:00', '08:30', 'delivered', 1, '0001', '07:50', '08:00', '08:30', 312, 'INT'),
-  ('14677376', 4, '08:30', '09:00', 'reported', 1, '0002', '08:06', '08:19', '09:14', 280, 'AMB'),
-  ('34952803', 3, '09:00', '09:30', 'completed', 1, '0003', '08:38', '09:14', '09:53', 344, 'AMB'),
-  ('27496639', 1, '09:30', '10:00', 'completed', 1, '0004', '09:30', '09:58', '10:50', 256, 'AMB'),
-  ('11105214', 3, '10:00', '10:30', 'in_progress', 1, '0005', '10:34', '11:02', NULL, NULL, 'AMB'),
-  ('5996591', 3, '10:30', '11:00', 'arrived', 1, '0006', '10:41', NULL, NULL, NULL, 'GUA'),
-  ('39767703', 1, '11:00', '11:30', 'confirmed', 1, NULL, NULL, NULL, NULL, NULL, 'AMB'),
-  ('21374803', 4, '11:30', '12:00', 'given', 0, NULL, NULL, NULL, NULL, NULL, 'AMB'),
-  ('25333444', 1, '12:00', '12:30', 'absent', 1, NULL, NULL, NULL, NULL, NULL, 'AMB'),
-  ('35999000', 4, '12:30', '13:00', 'cancelled', 0, NULL, NULL, NULL, NULL, NULL, 'AMB')
-  ) SELECT * FROM v
-) v JOIN patients p ON p.dni = v.dni;
-
-INSERT INTO reports (appointment_id, radiologist_id, technique, findings, conclusion, status, signed_at)
-SELECT a.id, 4, 'RM 1.5T, secuencias habituales.', 'Sin alteraciones de señal significativas.', 'Estudio dentro de límites normales.', 'signed', datetime('now')
-FROM appointments a WHERE a.status IN ('reported', 'delivered');
+-- Los turnos de ejemplo (RM, TC y Rx con notas, observaciones, informes e
+-- imágenes ficticias) se generan para cualquier día desde el Turnero con el
+-- botón "Cargar turnos de ejemplo" (POST /api/demo/appointments).

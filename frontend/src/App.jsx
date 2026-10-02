@@ -9,6 +9,7 @@ import Technicians from './pages/Technicians';
 import Reports from './pages/Reports';
 import ReportEditor from './pages/ReportEditor';
 import ReportPrint from './pages/ReportPrint';
+import Viewer from './pages/Viewer';
 import Delivery from './pages/Delivery';
 import Patients from './pages/Patients';
 import PatientDetail from './pages/PatientDetail';
@@ -43,6 +44,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/informe/:id/imprimir" element={<ReportPrint />} />
+      <Route path="/visor/:id" element={<Viewer />} />
       <Route element={<Layout />}>
         {Object.entries(PAGES).map(([path, Page]) => allowed(path) && <Route key={path} path={path} element={<Page />} />)}
         {allowed('/informes') && <Route path="/informes/:id" element={<ReportEditor />} />}

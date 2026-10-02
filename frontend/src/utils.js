@@ -83,8 +83,11 @@ export const EVENT_LABELS = {
   reminder: 'Recordatorio',
 };
 
+// URL del visor: el del PACS configurado o, si no hay, el visor de
+// demostración con imágenes ficticias.
 export function viewerUrl(template, appointment) {
-  if (!template || !appointment?.study_instance_uid) return null;
+  if (!appointment?.study_instance_uid) return null;
+  if (!template) return `/visor/${appointment.id}`;
   return template
     .replaceAll('{uid}', encodeURIComponent(appointment.study_instance_uid))
     .replaceAll('{accession}', encodeURIComponent(appointment.accession_number || ''));

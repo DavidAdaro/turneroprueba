@@ -76,6 +76,8 @@ export const api = {
   createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
   revokeApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
 
+  createDemoAppointments: (date) => request('/demo/appointments', { method: 'POST', body: { date } }),
+
   getStats: (from, to) => request(`/stats${qs({ from, to })}`),
   getBilling: (from, to, insuranceId) => request(`/stats/billing${qs({ from, to, insurance_id: insuranceId })}`),
 };

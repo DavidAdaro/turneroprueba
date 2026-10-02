@@ -56,6 +56,24 @@ misma modalidad) y una admisión se puede anular. Cada paso queda en el
   valor y autorización, agrupados por cobertura, exportable a CSV.
 - **Integración PACS / modalidades** (ver abajo).
 
+## Datos e imágenes de ejemplo
+
+En el **Turnero del día**, el administrador tiene el botón **Cargar turnos de
+ejemplo**: agrega para la fecha elegida 12 turnos ficticios de **resonancia,
+tomografía y rayos** (pacientes inventados con DNI 90.000.0xx) con notas del
+turno, observaciones del paciente y del técnico, indicación, médico
+derivante e informes (firmados o en borrador). El estado de cada turno
+depende del día: pasados → realizados/informados/entregados, hoy → según la
+hora, futuros → pendientes. Se puede usar en cualquier día y no duplica.
+
+Los estudios con imágenes en el PACS se abren en el **visor de
+demostración** (`/visor/:id`, botón **VM**): imágenes **ficticias** generadas
+en el navegador según modalidad y zona (cerebro, columna, rodilla, tórax,
+abdomen), con series (T1/T2/FLAIR/STIR, ventanas de TC, frente y perfil de
+Rx), cortes con la rueda del mouse, brillo/contraste arrastrando, invertir,
+y al costado las notas del turno, observaciones e informe. Si se configura
+la URL de un visor real en Configuración → Centro, VM abre ese en su lugar.
+
 ## Roles
 
 | Rol | Ve |
@@ -85,7 +103,7 @@ cd backend
 npm install
 cp .dev.vars.example .dev.vars        # y completar los secretos
 npm run db:schema:local
-npm run db:seed:local                  # incluye turnos de ejemplo para hoy
+npm run db:seed:local
 npm run dev                            # http://localhost:8788
 
 # Frontend (otra terminal)

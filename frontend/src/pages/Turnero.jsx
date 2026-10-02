@@ -16,6 +16,7 @@ import {
   Pill,
   Plus,
   RefreshCw,
+  Sparkles,
   Table2,
   Undo2,
   XCircle,
@@ -114,6 +115,18 @@ export default function Turnero() {
           <button className="flex items-center gap-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20" onClick={reload}><RefreshCw size={14} /> Actualizar</button>
           {can('admin', 'reception') && (
             <button className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 hover:bg-emerald-500" onClick={() => navigate('/turnos')}><Plus size={14} /> Nuevo turno</button>
+          )}
+          {can('admin') && (
+            <button
+              className="flex items-center gap-1 rounded bg-sky-700 px-2 py-1 hover:bg-sky-600"
+              title="Agrega turnos ficticios de RM, TC y Rx (con notas, observaciones, informes e imágenes) para este día"
+              onClick={() => act(async () => {
+                const r = await api.createDemoAppointments(date);
+                if (!r.created) setError('Los turnos de ejemplo de este día ya estaban cargados');
+              })}
+            >
+              <Sparkles size={14} /> Cargar turnos de ejemplo
+            </button>
           )}
         </div>
       </div>
@@ -242,6 +255,11 @@ export default function Turnero() {
                   </td>
                   <td className={td}>
                     <span className={`block px-1 py-0.5 uppercase ${a.study_contrast ? 'bg-amber-500' : ''}`}>{a.study_name}</span>
+                    {(a.notes || a.patient_notes) && (
+                      <span className="block max-w-[260px] truncate px-1 text-[10px] text-yellow-200 normal-case" title={[a.notes && `Nota: ${a.notes}`, a.patient_notes && `Paciente: ${a.patient_notes}`].filter(Boolean).join('\n')}>
+                        ✎ {a.notes || a.patient_notes}
+                      </span>
+                    )}
                   </td>
                   <td className={td}>
                     <span title={a.study_contrast ? 'Lleva contraste' : 'Sin contraste'}>
@@ -324,8 +342,6 @@ export default function Turnero() {
                       </Icon>
                       {viewer ? (
                         <a href={viewer} target="_blank" rel="noreferrer" title="Abrir visor" className="bg-black px-1.5 py-1 text-[13px] font-black italic text-white">VM</a>
-                      ) : a.pacs_status === 'received' ? (
-                        <span title={`En PACS: ${a.image_count} imágenes (configurá el visor en Configuración → Centro)`} className="bg-black px-1.5 py-1 text-[13px] font-black italic text-white/70">VM</span>
                       ) : (
                         <span className="w-8" />
                       )}
@@ -336,7 +352,11 @@ export default function Turnero() {
             })}
           </tbody>
         </table>
-        {data && rows.length === 0 && <p className="py-10 text-center text-white/50">No hay turnos este día</p>}
+        {data && rows.length === 0 && (
+          <p className="py-10 text-center text-white/50">
+            No hay turnos este día.{can('admin') ? ' Podés cargar turnos de ejemplo con el botón de arriba.' : ''}
+          </p>
+        )}
       </div>
 
       {open && <AppointmentModal id={open.id} initialMode={open.mode} onClose={() => setOpen(null)} onChanged={reload} />}

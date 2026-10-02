@@ -88,11 +88,7 @@ export default function ReportEditor() {
           {a.patient_notes && <Alert>⚠ {a.patient_notes}</Alert>}
           <div className="pt-1">
             {a.pacs_status === 'received' ? (
-              viewer ? (
-                <a href={viewer} target="_blank" rel="noreferrer" className="btn-primary"><ExternalLink size={15} /> Abrir imágenes ({a.image_count})</a>
-              ) : (
-                <span className="text-xs text-slate-500">PACS: {a.image_count} imágenes recibidas · configurá la URL del visor en Configuración → Centro</span>
-              )
+              <a href={viewer} target="_blank" rel="noreferrer" className="btn-primary"><ExternalLink size={15} /> Abrir imágenes ({a.image_count})</a>
             ) : (
               <span className="text-xs text-amber-700">Las imágenes todavía no llegaron al PACS</span>
             )}
