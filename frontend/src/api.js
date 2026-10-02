@@ -71,6 +71,11 @@ export const api = {
   saveReport: (appointmentId, data) => request(`/reports/${appointmentId}`, { method: 'PUT', body: data }),
   signReport: (appointmentId) => request(`/reports/${appointmentId}/sign`, { method: 'POST' }),
 
+  getApiKeyScopes: () => request('/api-keys/scopes'),
+  getApiKeys: () => request('/api-keys'),
+  createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
+  revokeApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
+
   getStats: (from, to) => request(`/stats${qs({ from, to })}`),
   getBilling: (from, to, insuranceId) => request(`/stats/billing${qs({ from, to, insurance_id: insuranceId })}`),
 };

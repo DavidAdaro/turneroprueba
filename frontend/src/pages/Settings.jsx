@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Check, Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { api } from '../api';
 import { useData } from '../components/useData';
 import { invalidateCatalogs } from '../components/useCatalogs';
 import { ErrorMsg, Field, Modal, ModalityTag, PageHeader } from '../components/ui';
-import { ROLE_LABELS, WEEKDAYS, money, today } from '../utils';
+import { ROLE_LABELS, WEEKDAYS, formatDateTime, money, today } from '../utils';
 
 const TABS = [
   ['equipment', 'Equipos y horarios'],
@@ -12,6 +12,7 @@ const TABS = [
   ['insurances', 'Obras sociales'],
   ['blocks', 'Bloqueos de agenda'],
   ['users', 'Usuarios'],
+  ['apikeys', 'API keys'],
   ['clinic', 'Centro e integración'],
 ];
 
@@ -30,6 +31,7 @@ export default function Settings() {
       {tab === 'insurances' && <InsurancesTab />}
       {tab === 'blocks' && <BlocksTab />}
       {tab === 'users' && <UsersTab />}
+      {tab === 'apikeys' && <ApiKeysTab />}
       {tab === 'clinic' && <ClinicTab />}
     </div>
   );
@@ -385,6 +387,116 @@ function UserForm({ initial, onSubmit }) {
   );
 }
 
+// ---------- API keys ----------
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8788/api').replace(/\/$/, '');
+
+function ApiKeysTab() {
+  const { data, error: loadError, reload } = useData(() => Promise.all([api.getApiKeys(), api.getApiKeyScopes()]), []);
+  const [name, setName] = useState('');
+  const [scopes, setScopes] = useState(['schedule:read']);
+  const [created, setCreated] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+  if (loadError) return <ErrorMsg error={loadError} />;
+  if (!data) return null;
+  const [keys, scopeLabels] = data;
+
+  const toggle = (s) => setScopes((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
+  const create = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const k = await api.createApiKey({ name, scopes });
+      setCreated(k);
+      setCopied(false);
+      setName('');
+      reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(created.key);
+      setCopied(true);
+    } catch {
+      setError('No se pudo copiar: seleccioná la key y copiala a mano');
+    }
+  };
+  const revoke = async (k) => {
+    if (!confirm(`¿Revocar la key "${k.name}"? Los sistemas que la usen dejan de tener acceso en el acto.`)) return;
+    try {
+      await api.revokeApiKey(k.id);
+      reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl space-y-3">
+      <form onSubmit={create} className="card space-y-3 p-4">
+        <div className="flex items-center gap-2 font-medium"><KeyRound size={17} /> Generar API key</div>
+        <Field label="Nombre (para qué sistema es)">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder='Ej.: "InPatient", "PACS Orthanc"' required />
+        </Field>
+        <div>
+          <div className="mb-1 text-xs font-medium text-slate-600">Permisos</div>
+          {Object.entries(scopeLabels).map(([k, label]) => (
+            <label key={k} className="flex items-center gap-2 py-0.5 text-sm">
+              <input type="checkbox" checked={scopes.includes(k)} onChange={() => toggle(k)} />
+              <code className="text-xs">{k}</code> <span className="text-slate-600">— {label}</span>
+            </label>
+          ))}
+        </div>
+        <ErrorMsg error={error} />
+        <div className="flex justify-end"><button className="btn-primary" disabled={!scopes.length}><Plus size={15} /> Generar</button></div>
+      </form>
+
+      {created && (
+        <div className="card space-y-2 border-emerald-300 bg-emerald-50 p-4">
+          <div className="font-medium text-emerald-900">API key "{created.name}" creada</div>
+          <p className="text-sm text-emerald-900">Copiala ahora: <b>no se vuelve a mostrar</b>. Si la perdés, revocala y generá otra.</p>
+          <div className="flex gap-2">
+            <input className="input font-mono text-xs" readOnly value={created.key} onFocus={(e) => e.target.select()} />
+            <button type="button" className="btn-secondary shrink-0" onClick={copy}>{copied ? <><Check size={15} /> Copiada</> : <><Copy size={15} /> Copiar</>}</button>
+          </div>
+          <div className="text-xs text-slate-600">
+            Uso: header <code>X-API-Key: {created.key_prefix}…</code> contra <code>{API_BASE}/integration/…</code>
+            <pre className="mt-1 overflow-x-auto rounded bg-white p-2">{`curl -H "X-API-Key: <la key>" "${API_BASE}/integration/schedule?date=${today()}"`}</pre>
+          </div>
+          <div className="flex justify-end"><button type="button" className="btn-secondary" onClick={() => setCreated(null)}>Listo, ya la guardé</button></div>
+        </div>
+      )}
+
+      <div className="card overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-slate-50"><tr><th className="th">Nombre</th><th className="th">Key</th><th className="th">Permisos</th><th className="th">Creada</th><th className="th">Último uso</th><th className="th" /></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {keys.length === 0 && <tr><td colSpan={6} className="td py-6 text-center text-slate-400">Todavía no hay API keys</td></tr>}
+            {keys.map((k) => (
+              <tr key={k.id} className={k.revoked_at ? 'opacity-50' : ''}>
+                <td className="td font-medium">{k.name}</td>
+                <td className="td font-mono text-xs">{k.key_prefix}…</td>
+                <td className="td text-xs">{k.scopes.join(', ')}</td>
+                <td className="td text-xs">{formatDateTime(k.created_at)}{k.created_by_name && <div className="text-slate-500">{k.created_by_name}</div>}</td>
+                <td className="td text-xs">{k.last_used_at ? formatDateTime(k.last_used_at) : 'Nunca'}</td>
+                <td className="td text-right">
+                  {k.revoked_at ? (
+                    <span className="text-xs text-red-600">Revocada {formatDateTime(k.revoked_at)}</span>
+                  ) : (
+                    <button className="btn-secondary px-2 py-1 text-xs text-red-600" onClick={() => revoke(k)}>Revocar</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Centro ----------
 function ClinicTab() {
   const { data, reload } = useData(() => api.getSettings(), []);
@@ -419,10 +531,11 @@ function ClinicTab() {
         <input className="input" value={f.report_footer} onChange={set('report_footer')} />
       </Field>
       <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
-        <b>Integración con equipos y PACS</b> (servidor a servidor, header <code>X-API-Key</code> = secreto <code>INTEGRATION_API_KEY</code> del backend):
+        <b>Integración con sistemas externos</b> (servidor a servidor, header <code>X-API-Key</code> con una key generada en la pestaña <b>API keys</b>):
         <ul className="mt-1 list-disc pl-5">
-          <li><code>GET /api/integration/worklist?ae_title=RM15T</code> → Modality Worklist (JSON con atributos DICOM) de los pacientes admitidos.</li>
-          <li><code>POST /api/integration/study-received</code> <code>{'{ accession_number, study_instance_uid, image_count }'}</code> → el PACS avisa que recibió el estudio.</li>
+          <li><code>GET /api/integration/schedule?date=AAAA-MM-DD</code> → turnero del día (permiso <code>schedule:read</code>).</li>
+          <li><code>GET /api/integration/worklist?ae_title=RM15T</code> → Modality Worklist (JSON con atributos DICOM) de los pacientes admitidos (permiso <code>worklist:read</code>).</li>
+          <li><code>POST /api/integration/study-received</code> <code>{'{ accession_number, study_instance_uid, image_count }'}</code> → el PACS avisa que recibió el estudio (permiso <code>pacs:write</code>).</li>
           <li>Con <code>PACS_MODE</code> sin configurar, la recepción en PACS se simula al finalizar el estudio (modo prueba).</li>
         </ul>
       </div>

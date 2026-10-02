@@ -1,4 +1,5 @@
 JWT_SECRET=cambiar-por-un-secreto-largo
-# Para la worklist y el aviso del PACS (/api/integration/*)
-INTEGRATION_API_KEY=cambiar-por-una-key-larga
+# Opcional: key maestra con todos los permisos para /api/integration/*.
+# Lo normal es generar las keys desde Configuración → API keys.
+# INTEGRATION_API_KEY=cambiar-por-una-key-larga
 # PACS_MODE=external  # por defecto "simulated"

@@ -13,6 +13,7 @@ import appointments from './routes/appointments';
 import reports from './routes/reports';
 import stats from './routes/stats';
 import integration from './routes/integration';
+import apiKeys from './routes/apiKeys';
 
 const app = new Hono();
 
@@ -35,6 +36,7 @@ app.route('/api/patients', patients);
 app.route('/api/appointments', appointments);
 app.route('/api/reports', reports);
 app.route('/api/stats', stats);
+app.route('/api/api-keys', apiKeys);
 app.route('/api/integration', integration);
 
 app.notFound((c) => c.json({ error: 'Ruta no encontrada' }, 404));

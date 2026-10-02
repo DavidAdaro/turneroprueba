@@ -115,7 +115,7 @@ cd backend
 npx wrangler d1 create turnero-db      # copiar el database_id a wrangler.jsonc
 npm run db:schema:remote && npm run db:seed:remote
 npx wrangler secret put JWT_SECRET
-npx wrangler secret put INTEGRATION_API_KEY
+npm run db:migrate:remote              # solo si la base es anterior a las API keys
 # CORS_ORIGIN en wrangler.jsonc = URL del frontend
 npm run deploy
 
@@ -127,21 +127,30 @@ npx wrangler deploy
 Antes de usarlo con datos reales: cambiar las contraseñas de los usuarios
 de prueba (o no cargar `seed.sql`).
 
-## Integración con equipos y PACS
+## API keys e integración con sistemas externos
 
-Endpoints servidor a servidor, autenticados con el header `X-API-Key`
-(= secreto `INTEGRATION_API_KEY`):
+En **Configuración → API keys** el administrador genera keys para otros
+sistemas (InPatient, el PACS, un broker de worklist). Cada key tiene un
+nombre y solo los permisos que se le marcan. Se muestra completa **una sola
+vez** al crearla (en la base queda solo su hash SHA-256), se ve cuándo se
+usó por última vez y se puede revocar en el acto.
 
-- `GET /api/integration/worklist?ae_title=RM15T&date=AAAA-MM-DD` —
-  **Modality Worklist** en JSON con atributos DICOM (`AccessionNumber`,
-  `StudyInstanceUID`, `PatientID`, `PatientName`, `ScheduledProcedureStepSequence`,
-  …) de los pacientes admitidos/en sala de ese equipo. Pensado para que un
-  broker MWL (plugin de Orthanc, dcm4chee, etc.) la sirva a la modalidad, así
-  el estudio llega al PACS ya con el N° de acceso y el UID del RIS.
-- `POST /api/integration/study-received` con
-  `{ "accession_number", "study_instance_uid", "image_count" }` — el PACS
-  avisa que recibió el estudio; si el técnico no lo había finalizado, pasa a
-  Realizado.
+| Permiso | Endpoint |
+| --- | --- |
+| `schedule:read` | `GET /api/integration/schedule?date=AAAA-MM-DD[&modality=MR][&ae_title=RM15T]` — turnero del día: paciente, estudio, equipo, cobertura, horarios, estado, N° de acceso, estado de PACS e informe. |
+| `worklist:read` | `GET /api/integration/worklist?ae_title=RM15T[&date=]` — **Modality Worklist** en JSON con atributos DICOM (`AccessionNumber`, `StudyInstanceUID`, `PatientID`, `PatientName`, `ScheduledProcedureStepSequence`, …) de los pacientes admitidos o en sala. Pensado para que un broker MWL (plugin de Orthanc, dcm4chee, etc.) la sirva a la modalidad, así el estudio llega al PACS con el N° de acceso y el UID del RIS. |
+| `pacs:write` | `POST /api/integration/study-received` con `{ "accession_number", "study_instance_uid", "image_count" }` — el PACS avisa que recibió el estudio; si el técnico no lo había finalizado, pasa a Realizado. |
+
+Todas se llaman servidor a servidor con el header `X-API-Key`:
+
+```bash
+curl -H "X-API-Key: ris_..." "http://localhost:8788/api/integration/schedule?date=2026-10-02"
+```
+
+`INTEGRATION_API_KEY` (secreto opcional del Worker) sigue funcionando como
+key maestra con todos los permisos. Si la base se creó antes de que
+existieran las API keys, agregá la tabla sin borrar datos con
+`npm run db:migrate:local` (o `db:migrate:remote`).
 
 Modo PACS (`PACS_MODE`, variable del Worker):
 
