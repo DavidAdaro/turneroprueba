@@ -1,9 +1,13 @@
 import { nextAccessionNumber, newDicomUid } from './pacs';
 import { fromMinutes, nowLocal, toMinutes } from './time';
 
-// Datos 100 % ficticios para probar el RIS: pacientes (DNI 90.000.0xx),
+// Datos 100 % ficticios para probar el RIS: pacientes (DNI 9000xxxx),
 // turnos de RM, TC y Rx con notas, observaciones e informes. Las imágenes
 // las genera el visor de demostración a partir de cada turno.
+//
+// Se generan de a un día (POST /api/demo/appointments) y el frontend recorre
+// el rango (3 semanas atrás y 3 adelante). Cada día usa pocas consultas a D1
+// (todo en batch) para no pasar el límite por invocación del plan gratuito.
 
 export const DEMO_PATIENTS = [
   { dni: '90000001', first_name: 'Lucía', last_name: 'Benítez', birth_date: '1984-03-12', sex: 'F', insurance: 'OSDE', affiliate_number: '61200001', weight_kg: 62, notes: 'Claustrofobia moderada' },
@@ -20,7 +24,9 @@ export const DEMO_PATIENTS = [
   { dni: '90000012', first_name: 'Diego', last_name: 'Molina', birth_date: '1986-06-16', sex: 'M', insurance: 'APROSS', affiliate_number: '0090012', weight_kg: 76, notes: 'Lesión deportiva, viene con muletas' },
 ];
 
-// Un turno de ejemplo por fila. study: código del catálogo del seed.
+// Plantilla del día. study: código del catálogo del seed. El día de hoy usa
+// estos pacientes y notas tal cual; los demás días rotan pacientes del
+// padrón generado y notas genéricas.
 const PLAN = [
   { dni: '90000001', mod: 'MR', study: '340101', time: '08:00', care: 'AMB', ref: 'Dra. Castillo', ind: 'Cefalea crónica refractaria', notes: 'Claustrofobia: ofrecer música y tapones. Acompañante puede entrar.', tech: 'Se completó el protocolo con pausas. Sin incidencias.', report: { findings: 'Parénquima encefálico de señal conservada. Sistema ventricular de tamaño y morfología normales. No se observan lesiones ocupantes de espacio ni áreas de restricción en difusión.', conclusion: 'RM de cerebro sin hallazgos patológicos.' } },
   { dni: '90000003', mod: 'DX', study: '420101', time: '08:10', care: 'AMB', ref: 'Dr. Navarro', ind: 'Tos persistente de 3 semanas', notes: 'Trae radiografía previa de 2024 para comparar.', tech: 'Proyecciones frente y perfil en bipedestación.', report: { findings: 'Campos pulmonares sin infiltrados ni consolidaciones. Senos costofrénicos libres. Silueta cardíaca de tamaño normal.', conclusion: 'Radiografía de tórax sin alteraciones.' } },
@@ -36,26 +42,83 @@ const PLAN = [
   { dni: '90000007', mod: 'DX', study: '420101', time: '12:30', care: 'AMB', ref: 'Medicina laboral', ind: 'Examen preocupacional', notes: 'Preocupacional: entregar el resultado a la empresa.', tech: null, report: null },
 ];
 
+// Padrón de pacientes inventados para el resto de los días (DNI 90001000+).
+const FIRST_F = ['María', 'Laura', 'Silvia', 'Paula', 'Gabriela', 'Natalia', 'Mónica', 'Romina', 'Julieta', 'Camila', 'Andrea', 'Verónica', 'Cecilia', 'Mariela', 'Agustina'];
+const FIRST_M = ['Juan', 'Carlos', 'Luis', 'Pablo', 'Sergio', 'Gustavo', 'Marcelo', 'Fernando', 'Nicolás', 'Matías', 'Ricardo', 'Alberto', 'Eduardo', 'Federico', 'Tomás'];
+const LAST = ['Gómez', 'Rodríguez', 'Fernández', 'López', 'Díaz', 'Martínez', 'Pérez', 'García', 'Sánchez', 'Romero', 'Torres', 'Álvarez', 'Ruiz', 'Ramírez', 'Flores', 'Acosta', 'Rojas', 'Herrera', 'Suárez', 'Ortiz', 'Ponce', 'Vega', 'Cabrera', 'Godoy', 'Arias'];
+const PATIENT_NOTES = [null, null, null, null, 'Hipertenso', 'Alergia a la penicilina', 'Claustrofobia leve', 'Usa audífonos', 'Diabético tipo 2', 'Movilidad reducida: usa bastón', null, null];
+const POOL_SIZE = 100;
+
+export const GENERATED_PATIENTS = Array.from({ length: POOL_SIZE }, (_, i) => {
+  const female = i % 2 === 0;
+  const year = 1945 + ((i * 7) % 61);
+  const insurance = year < 1960 ? 'PAMI' : ['OSDE', 'SMG', 'APROSS', 'PART', 'APROSS'][i % 5];
+  return {
+    dni: String(90001000 + i),
+    first_name: (female ? FIRST_F : FIRST_M)[(i * 3) % 15],
+    last_name: LAST[(i * 11) % LAST.length],
+    birth_date: `${year}-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 27) + 1).padStart(2, '0')}`,
+    sex: female ? 'F' : 'M',
+    insurance,
+    affiliate_number: insurance === 'PART' ? null : String(70000000 + i * 37),
+    weight_kg: 50 + ((i * 13) % 45),
+    notes: PATIENT_NOTES[i % PATIENT_NOTES.length],
+  };
+});
+
+const GENERIC_NOTES = [
+  null,
+  'Trae estudios previos en CD.',
+  'Confirmó por WhatsApp.',
+  'Solicita turno temprano por trabajo.',
+  null,
+  'Viene acompañado por un familiar.',
+  'Pidió factura a nombre de la empresa.',
+  'Recordar traer la orden original firmada.',
+  null,
+  'Control evolutivo: comparar con estudio anterior.',
+];
+const GENERIC_TECH = {
+  MR: ['Protocolo completo sin incidencias.', 'Paciente colaborador, sin artefactos de movimiento.', 'Se agregó secuencia adicional a pedido del médico.'],
+  CT: ['Adquisición sin incidencias.', 'Cortes finos con reconstrucciones multiplanares.', 'Paciente colaborador.'],
+  DX: ['Proyecciones de rutina sin repeticiones.', 'Se repitió una proyección por movimiento.', 'Paciente en bipedestación.'],
+};
+
 const DONE = ['delivered', 'reported', 'completed'];
 
 // Hora local del centro (UTC-3) → timestamp UTC de SQLite.
 const toUtc = (date, hhmm) => new Date(`${date}T${hhmm}:00-03:00`).toISOString().slice(0, 19).replace('T', ' ');
 const plus = (hhmm, min) => fromMinutes(Math.min(23 * 60 + 59, Math.max(0, toMinutes(hhmm) + min)));
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 864e5);
+const mix = (a, b) => {
+  let h = Math.imul(a ^ 0x9e3779b9, 2654435761) ^ Math.imul(b + 0x7f4a7c15, 1597334677);
+  h ^= h >>> 15;
+  return (Math.imul(h, 2246822519) >>> 0) % 1000;
+};
 
-// Estado de cada turno según el día: pasado → realizados, hoy → según la
-// hora actual, futuro → pendientes.
-function statusFor(date, item, index, now) {
-  if (date > now.date) return index % 3 === 0 ? 'given' : 'confirmed';
-  if (date < now.date) return index === 8 ? 'absent' : DONE[index % 3];
-  const diff = toMinutes(now.time) - toMinutes(item.time);
-  if (diff > 50) return index === 8 ? 'absent' : DONE[index % 3];
+// Estado de cada turno según el día: pasado → realizados (algún ausente o
+// cancelado), hoy → según la hora actual, futuro → pendientes.
+function statusFor(date, item, index, now, r) {
+  if (date > now.date) return r < 350 ? 'given' : 'confirmed';
+  const diff = date < now.date ? Infinity : toMinutes(now.time) - toMinutes(item.time);
+  if (diff > 50) {
+    if (r < 60) return 'absent';
+    if (r < 90) return 'cancelled';
+    // Lo de hace más de 2 días ya está informado o entregado.
+    if (daysBetween(date, now.date) > 2) return r < 600 ? 'delivered' : 'reported';
+    return DONE[index % 3];
+  }
   if (diff > 15) return 'in_progress';
   if (diff > -20) return 'arrived';
-  return index % 3 === 0 ? 'given' : 'confirmed';
+  return r < 350 ? 'given' : 'confirmed';
 }
 
 export async function createDemoAppointments(db, date, userId) {
   const now = nowLocal();
+  const offset = daysBetween(now.date, date);
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+  if (weekday === 0) return { created: 0, skipped: 0 }; // domingo: cerrado
+
   const [{ results: equipment }, { results: studies }, { results: insurances }, tech, radiologist] = await Promise.all([
     db.prepare('SELECT * FROM equipment WHERE active = 1 ORDER BY id').all(),
     db.prepare('SELECT * FROM studies WHERE active = 1').all(),
@@ -65,105 +128,134 @@ export async function createDemoAppointments(db, date, userId) {
   ]);
   const insuranceId = (code) => insurances.find((i) => i.code === code)?.id ?? null;
 
-  // Pacientes ficticios (se crean una sola vez).
-  for (const p of DEMO_PATIENTS) {
-    await db
-      .prepare(
-        `INSERT INTO patients (dni, first_name, last_name, birth_date, sex, phone, insurance_id, affiliate_number, weight_kg, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dni) DO NOTHING`
-      )
-      .bind(p.dni, p.first_name, p.last_name, p.birth_date, p.sex, `54926100${p.dni.slice(-5)}`, insuranceId(p.insurance), p.affiliate_number, p.weight_kg, p.notes)
-      .run();
+  // Turnos del día: hoy, la plantilla completa; otros días, ~75 % de los
+  // horarios con pacientes rotados. Sábado solo rayos.
+  const items = [];
+  for (const [index, item] of PLAN.entries()) {
+    const r = mix(offset + 1000, index);
+    if (weekday === 6 && item.mod !== 'DX') continue;
+    if (offset !== 0 && r < 250) continue;
+    const patient = offset === 0 ? DEMO_PATIENTS.find((p) => p.dni === item.dni) : GENERATED_PATIENTS[(offset * 17 + index * 29 + 1000 * POOL_SIZE) % POOL_SIZE];
+    items.push({
+      index,
+      r: mix(offset + 7, index + 300), // independiente del que decide si hay turno
+      item,
+      patient,
+      notes: offset === 0 ? item.notes : GENERIC_NOTES[mix(offset, index + 50) % GENERIC_NOTES.length],
+      tech: offset === 0 ? item.tech : GENERIC_TECH[item.mod][mix(offset, index + 90) % 3],
+    });
   }
-  const { results: patients } = await db
-    .prepare(`SELECT id, dni, insurance_id FROM patients WHERE dni IN (${DEMO_PATIENTS.map(() => '?').join(',')})`)
-    .bind(...DEMO_PATIENTS.map((p) => p.dni))
-    .all();
+  if (!items.length) return { created: 0, skipped: 0 };
 
+  // Pacientes (se crean una sola vez).
+  const people = [...new Map(items.map((x) => [x.patient.dni, x.patient])).values()];
+  await db.batch(
+    people.map((p) =>
+      db
+        .prepare(
+          `INSERT INTO patients (dni, first_name, last_name, birth_date, sex, phone, insurance_id, affiliate_number, weight_kg, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dni) DO NOTHING`
+        )
+        .bind(p.dni, p.first_name, p.last_name, p.birth_date, p.sex, `5492610${p.dni.slice(-6)}`, insuranceId(p.insurance), p.affiliate_number, p.weight_kg, p.notes)
+    )
+  );
+  const dnis = people.map((p) => p.dni);
+  const [{ results: patients }, { results: existing }, firstAccession] = await Promise.all([
+    db.prepare(`SELECT id, dni, insurance_id FROM patients WHERE dni IN (${dnis.map(() => '?').join(',')})`).bind(...dnis).all(),
+    db.prepare('SELECT patient_id, start_time FROM appointments WHERE date = ?').bind(date).all(),
+    nextAccessionNumber(db, date),
+  ]);
+  const [prefix, firstSeq] = firstAccession.split('-');
+  let seq = Number(firstSeq);
+
+  const stmts = [];
   let created = 0;
   let skipped = 0;
-  for (const [index, item] of PLAN.entries()) {
-    const patient = patients.find((p) => p.dni === item.dni);
+  for (const { index, r, item, patient: p, notes, tech: techNotes } of items) {
+    const patient = patients.find((x) => x.dni === p.dni);
     const eq = equipment.find((e) => e.modality === item.mod);
-    const study = studies.find((s) => s.code === item.study) || studies.find((s) => s.modality === item.mod);
-    if (!patient || !eq || !study) {
-      skipped++;
-      continue;
-    }
-    const exists = await db
-      .prepare('SELECT 1 FROM appointments WHERE patient_id = ? AND date = ? AND start_time = ?')
-      .bind(patient.id, date, item.time)
-      .first();
-    if (exists) {
+    const study = studies.find((x) => x.code === item.study) || studies.find((x) => x.modality === item.mod);
+    // No duplicar: mismo paciente u horario ocupado en ese equipo.
+    if (!patient || !eq || !study || existing.some((e) => e.patient_id === patient.id || e.start_time === item.time)) {
       skipped++;
       continue;
     }
 
-    const status = statusFor(date, item, index, now);
+    const status = statusFor(date, item, index, now, r);
     const admitted = ['arrived', 'in_progress', ...DONE].includes(status);
     const started = ['in_progress', ...DONE].includes(status);
     const done = DONE.includes(status);
-    const end = plus(item.time, study.duration_minutes);
-    const accession = admitted ? await nextAccessionNumber(db, date) : null;
+    const accession = admitted ? `${prefix}-${String(seq++).padStart(4, '0')}` : null;
 
-    const row = await db
-      .prepare(
-        `INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, status, care_type,
-          insurance_id, authorization_number, referring_physician, clinical_indication, order_received, notes,
-          accession_number, study_instance_uid, pacs_status, image_count, technician_id, technician_notes,
-          arrived_at, started_at, completed_at, delivered_at, delivered_to, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
-      )
-      .bind(
-        eq.id,
-        patient.id,
-        study.id,
-        date,
-        item.time,
-        end,
-        status,
-        item.care,
-        patient.insurance_id,
-        admitted ? `AUT-${date.replace(/-/g, '').slice(2)}${String(index + 1).padStart(2, '0')}` : null,
-        item.ref,
-        item.ind,
-        status === 'given' ? 0 : 1,
-        item.notes,
-        accession,
-        admitted ? newDicomUid() : null,
-        done ? 'received' : 'pending',
-        done ? (item.mod === 'DX' ? 2 : { MR: 240, CT: 380 }[item.mod] + index * 7) : null,
-        started ? tech?.id ?? null : null,
-        done ? item.tech : null,
-        admitted ? toUtc(date, plus(item.time, -12)) : null,
-        started ? toUtc(date, plus(item.time, 4)) : null,
-        done ? toUtc(date, plus(item.time, study.duration_minutes + 6)) : null,
-        status === 'delivered' ? toUtc(date, plus(item.time, 240)) : null,
-        status === 'delivered' ? 'Paciente' : null,
-        userId
-      )
-      .first();
-
-    if (['reported', 'delivered'].includes(status) && item.report) {
-      await db
+    stmts.push(
+      db
         .prepare(
-          `INSERT INTO reports (appointment_id, radiologist_id, technique, findings, conclusion, status, signed_at)
-           VALUES (?, ?, ?, ?, ?, 'signed', ?)`
+          `INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, status, care_type,
+            insurance_id, authorization_number, referring_physician, clinical_indication, order_received, notes, cancel_reason,
+            accession_number, study_instance_uid, pacs_status, image_count, technician_id, technician_notes,
+            arrived_at, started_at, completed_at, delivered_at, delivered_to, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .bind(row.id, radiologist?.id ?? null, `${study.name}.`, item.report.findings, item.report.conclusion, toUtc(date, plus(item.time, 120)))
-        .run();
-    } else if (status === 'completed' && item.report) {
-      // Un borrador para que el informante tenga algo empezado.
-      await db
-        .prepare("INSERT INTO reports (appointment_id, radiologist_id, technique, findings, status) VALUES (?, ?, ?, ?, 'draft')")
-        .bind(row.id, radiologist?.id ?? null, `${study.name}.`, item.report.findings)
-        .run();
+        .bind(
+          eq.id,
+          patient.id,
+          study.id,
+          date,
+          item.time,
+          plus(item.time, study.duration_minutes),
+          status,
+          offset === 0 ? item.care : r % 9 === 0 ? 'INT' : r % 13 === 0 ? 'GUA' : 'AMB',
+          patient.insurance_id,
+          admitted ? `AUT-${date.replace(/-/g, '').slice(2)}${String(index + 1).padStart(2, '0')}` : null,
+          item.ref,
+          item.ind,
+          status === 'given' ? 0 : 1,
+          notes,
+          status === 'cancelled' ? 'El paciente reprogramó por teléfono' : null,
+          accession,
+          admitted ? newDicomUid() : null,
+          done ? 'received' : 'pending',
+          done ? (item.mod === 'DX' ? 2 : { MR: 240, CT: 380 }[item.mod] + (r % 60)) : null,
+          started ? tech?.id ?? null : null,
+          done ? techNotes : null,
+          admitted ? toUtc(date, plus(item.time, -12)) : null,
+          started ? toUtc(date, plus(item.time, 4)) : null,
+          done ? toUtc(date, plus(item.time, study.duration_minutes + 6)) : null,
+          status === 'delivered' ? toUtc(date, plus(item.time, 300)) : null,
+          status === 'delivered' ? 'Paciente' : null,
+          userId
+        )
+    );
+    // Informe firmado o borrador, enlazado por N° de acceso.
+    if (item.report && ['reported', 'delivered', 'completed'].includes(status)) {
+      const signed = status !== 'completed';
+      stmts.push(
+        db
+          .prepare(
+            `INSERT INTO reports (appointment_id, radiologist_id, technique, findings, conclusion, status, signed_at)
+             SELECT id, ?, ?, ?, ?, ?, ? FROM appointments WHERE accession_number = ?`
+          )
+          .bind(
+            radiologist?.id ?? null,
+            `${study.name}.`,
+            item.report.findings,
+            signed ? item.report.conclusion : null,
+            signed ? 'signed' : 'draft',
+            signed ? toUtc(date, plus(item.time, 120)) : null,
+            accession
+          )
+      );
     }
-    await db
-      .prepare("INSERT INTO appointment_events (appointment_id, user_id, action, detail) VALUES (?, ?, 'created', 'Turno de ejemplo')")
-      .bind(row.id, userId)
-      .run();
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO appointment_events (appointment_id, user_id, action, detail)
+           SELECT id, ?, 'created', 'Turno de ejemplo' FROM appointments WHERE patient_id = ? AND date = ? AND start_time = ?`
+        )
+        .bind(userId, patient.id, date, item.time)
+    );
     created++;
   }
+  if (stmts.length) await db.batch(stmts);
   return { created, skipped };
 }

@@ -59,12 +59,14 @@ misma modalidad) y una admisión se puede anular. Cada paso queda en el
 ## Datos e imágenes de ejemplo
 
 En el **Turnero del día**, el administrador tiene el botón **Cargar turnos de
-ejemplo**: agrega para la fecha elegida 12 turnos ficticios de **resonancia,
-tomografía y rayos** (pacientes inventados con DNI 90.000.0xx) con notas del
-turno, observaciones del paciente y del técnico, indicación, médico
-derivante e informes (firmados o en borrador). El estado de cada turno
-depende del día: pasados → realizados/informados/entregados, hoy → según la
-hora, futuros → pendientes. Se puede usar en cualquier día y no duplica.
+ejemplo (±3 semanas)**: agrega turnos ficticios de **resonancia, tomografía y
+rayos** desde 3 semanas atrás hasta 3 semanas adelante (unos 290 turnos de
+~100 pacientes inventados con DNI 9000xxxx), sin domingos y con solo rayos
+los sábados. Traen notas del turno, observaciones del paciente y del
+técnico, indicación, médico derivante e informes (firmados o en borrador).
+El estado depende del día: pasados → informados/entregados (con algún
+ausente o cancelado), hoy → según la hora, futuros → dados/confirmados.
+Se puede apretar más de una vez: no duplica.
 
 Los estudios con imágenes en el PACS se abren en el **visor de
 demostración** (`/visor/:id`, botón **VM**): imágenes **ficticias** generadas

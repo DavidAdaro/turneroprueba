@@ -83,6 +83,26 @@ export default function Turnero() {
   const modalities = [...new Set(equipment.map((e) => e.modality))];
   const clinic = (settings?.clinic_name || 'CENTRO').split(' ')[0].toUpperCase().slice(0, 9);
 
+  const [progress, setProgress] = useState('');
+  // Turnos ficticios día por día, de 3 semanas atrás a 3 semanas adelante.
+  const loadDemo = async () => {
+    setError('');
+    const days = Array.from({ length: 43 }, (_, i) => addDays(today(), i - 21));
+    let created = 0;
+    try {
+      for (const [i, d] of days.entries()) {
+        setProgress(`${i + 1}/${days.length}`);
+        created += (await api.createDemoAppointments(d)).created;
+      }
+      if (!created) setError('Los turnos de ejemplo ya estaban cargados');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setProgress('');
+      reload();
+    }
+  };
+
   const act = async (fn) => {
     setError('');
     try {
@@ -118,14 +138,12 @@ export default function Turnero() {
           )}
           {can('admin') && (
             <button
-              className="flex items-center gap-1 rounded bg-sky-700 px-2 py-1 hover:bg-sky-600"
-              title="Agrega turnos ficticios de RM, TC y Rx (con notas, observaciones, informes e imágenes) para este día"
-              onClick={() => act(async () => {
-                const r = await api.createDemoAppointments(date);
-                if (!r.created) setError('Los turnos de ejemplo de este día ya estaban cargados');
-              })}
+              className="flex items-center gap-1 rounded bg-sky-700 px-2 py-1 hover:bg-sky-600 disabled:opacity-60"
+              title="Agrega turnos ficticios de RM, TC y Rx (con notas, observaciones, informes e imágenes) desde 3 semanas atrás hasta 3 semanas adelante"
+              disabled={!!progress}
+              onClick={loadDemo}
             >
-              <Sparkles size={14} /> Cargar turnos de ejemplo
+              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : 'Cargar turnos de ejemplo (±3 semanas)'}
             </button>
           )}
         </div>
@@ -354,7 +372,7 @@ export default function Turnero() {
         </table>
         {data && rows.length === 0 && (
           <p className="py-10 text-center text-white/50">
-            No hay turnos este día.{can('admin') ? ' Podés cargar turnos de ejemplo con el botón de arriba.' : ''}
+            No hay turnos este día.{can('admin') ? ' Podés cargar turnos de ejemplo (±3 semanas) con el botón de arriba.' : ''}
           </p>
         )}
       </div>
