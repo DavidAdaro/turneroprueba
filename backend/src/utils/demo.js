@@ -1,5 +1,6 @@
 import { nextAccessionNumber, newDicomUid } from './pacs';
 import { fromMinutes, nowLocal, toMinutes } from './time';
+import { canDo, conditionTexts, conditionsForPool, patientNotesFor, zoneOf } from './demoConditions';
 
 // Datos 100 % ficticios para probar el RIS: pacientes (DNI 9000xxxx),
 // turnos de RM, TC y Rx con notas, observaciones e informes. Las imágenes
@@ -10,43 +11,43 @@ import { fromMinutes, nowLocal, toMinutes } from './time';
 // (todo en batch) para no pasar el límite por invocación del plan gratuito.
 
 export const DEMO_PATIENTS = [
-  { dni: '90000001', first_name: 'Lucía', last_name: 'Benítez', birth_date: '1984-03-12', sex: 'F', insurance: 'OSDE', affiliate_number: '61200001', weight_kg: 62, notes: 'Claustrofobia moderada' },
-  { dni: '90000002', first_name: 'Martín', last_name: 'Aguirre', birth_date: '1971-07-28', sex: 'M', insurance: 'PAMI', affiliate_number: '150900000201', weight_kg: 94, notes: 'Alergia al iodo (urticaria en 2019)' },
-  { dni: '90000003', first_name: 'Sofía', last_name: 'Quiroga', birth_date: '1995-11-02', sex: 'F', insurance: 'SMG', affiliate_number: '80090003', weight_kg: 57, notes: null },
-  { dni: '90000004', first_name: 'Ernesto', last_name: 'Villalba', birth_date: '1948-01-19', sex: 'M', insurance: 'PAMI', affiliate_number: '150900000401', weight_kg: 78, notes: 'Marcapasos (no apto RM). Usa silla de ruedas' },
-  { dni: '90000005', first_name: 'Carla', last_name: 'Domínguez', birth_date: '1989-05-07', sex: 'F', insurance: 'APROSS', affiliate_number: '0090005', weight_kg: 70, notes: 'Embarazo descartado (test negativo)' },
-  { dni: '90000006', first_name: 'Raúl', last_name: 'Ferreyra', birth_date: '1963-09-30', sex: 'M', insurance: 'OSDE', affiliate_number: '61200006', weight_kg: 101, notes: 'Diabético, creatinina 1.1 (semana pasada)' },
-  { dni: '90000007', first_name: 'Ana Paula', last_name: 'Medina', birth_date: '2001-02-14', sex: 'F', insurance: 'PART', affiliate_number: null, weight_kg: 54, notes: null },
-  { dni: '90000008', first_name: 'Jorge', last_name: 'Sosa', birth_date: '1957-12-03', sex: 'M', insurance: 'APROSS', affiliate_number: '0090008', weight_kg: 83, notes: 'Prótesis de cadera izquierda (titanio)' },
-  { dni: '90000009', first_name: 'Valentina', last_name: 'Ríos', birth_date: '1978-08-21', sex: 'F', insurance: 'SMG', affiliate_number: '80090009', weight_kg: 66, notes: null },
-  { dni: '90000010', first_name: 'Héctor', last_name: 'Luna', birth_date: '1966-04-09', sex: 'M', insurance: 'PAMI', affiliate_number: '150900001001', weight_kg: 88, notes: 'Hipoacusia: hablarle de frente' },
-  { dni: '90000011', first_name: 'Florencia', last_name: 'Paz', birth_date: '1992-10-25', sex: 'F', insurance: 'OSDE', affiliate_number: '61200011', weight_kg: 60, notes: null },
-  { dni: '90000012', first_name: 'Diego', last_name: 'Molina', birth_date: '1986-06-16', sex: 'M', insurance: 'APROSS', affiliate_number: '0090012', weight_kg: 76, notes: 'Lesión deportiva, viene con muletas' },
+  { dni: '90000001', first_name: 'Lucía', last_name: 'Benítez', birth_date: '1984-03-12', sex: 'F', insurance: 'OSDE', affiliate_number: '61200001', weight_kg: 62, conditions: ['claustrophobia'], extra: null },
+  { dni: '90000002', first_name: 'Martín', last_name: 'Aguirre', birth_date: '1971-07-28', sex: 'M', insurance: 'PAMI', affiliate_number: '150900000201', weight_kg: 94, conditions: ['iodine'], extra: null },
+  { dni: '90000003', first_name: 'Sofía', last_name: 'Quiroga', birth_date: '1995-11-02', sex: 'F', insurance: 'SMG', affiliate_number: '80090003', weight_kg: 57, conditions: [], extra: null },
+  { dni: '90000004', first_name: 'Ernesto', last_name: 'Villalba', birth_date: '1948-01-19', sex: 'M', insurance: 'PAMI', affiliate_number: '150900000401', weight_kg: 78, conditions: ['pacemaker'], extra: 'Usa silla de ruedas' },
+  { dni: '90000005', first_name: 'Carla', last_name: 'Domínguez', birth_date: '1989-05-07', sex: 'F', insurance: 'APROSS', affiliate_number: '0090005', weight_kg: 70, conditions: ['iodine'], extra: 'Embarazo descartado (test negativo)' },
+  { dni: '90000006', first_name: 'Raúl', last_name: 'Ferreyra', birth_date: '1963-09-30', sex: 'M', insurance: 'OSDE', affiliate_number: '61200006', weight_kg: 101, conditions: ['dialysis', 'glaucoma'], extra: 'Diabético' },
+  { dni: '90000007', first_name: 'Ana Paula', last_name: 'Medina', birth_date: '2001-02-14', sex: 'F', insurance: 'PART', affiliate_number: null, weight_kg: 54, conditions: [], extra: null },
+  { dni: '90000008', first_name: 'Jorge', last_name: 'Sosa', birth_date: '1957-12-03', sex: 'M', insurance: 'APROSS', affiliate_number: '0090008', weight_kg: 83, conditions: ['prosthesis'], extra: null },
+  { dni: '90000009', first_name: 'Valentina', last_name: 'Ríos', birth_date: '1978-08-21', sex: 'F', insurance: 'SMG', affiliate_number: '80090009', weight_kg: 66, conditions: ['glaucoma'], extra: null },
+  { dni: '90000010', first_name: 'Héctor', last_name: 'Luna', birth_date: '1966-04-09', sex: 'M', insurance: 'PAMI', affiliate_number: '150900001001', weight_kg: 88, conditions: ['claustrophobia'], extra: 'Hipoacusia: hablarle de frente' },
+  { dni: '90000011', first_name: 'Florencia', last_name: 'Paz', birth_date: '1992-10-25', sex: 'F', insurance: 'OSDE', affiliate_number: '61200011', weight_kg: 60, conditions: ['pacemakerMR'], extra: null },
+  { dni: '90000012', first_name: 'Diego', last_name: 'Molina', birth_date: '1986-06-16', sex: 'M', insurance: 'APROSS', affiliate_number: '0090012', weight_kg: 76, conditions: [], extra: 'Lesión deportiva, viene con muletas' },
 ];
 
 // Plantilla del día. study: código del catálogo del seed. El día de hoy usa
 // estos pacientes y notas tal cual; los demás días rotan pacientes del
 // padrón generado y notas genéricas.
 const PLAN = [
-  { dni: '90000001', mod: 'MR', study: '340101', time: '08:00', care: 'AMB', ref: 'Dra. Castillo', ind: 'Cefalea crónica refractaria', notes: 'Claustrofobia: ofrecer música y tapones. Acompañante puede entrar.', tech: 'Se completó el protocolo con pausas. Sin incidencias.', report: { findings: 'Parénquima encefálico de señal conservada. Sistema ventricular de tamaño y morfología normales. No se observan lesiones ocupantes de espacio ni áreas de restricción en difusión.', conclusion: 'RM de cerebro sin hallazgos patológicos.' } },
+  { dni: '90000001', mod: 'MR', study: '340101', time: '08:00', care: 'AMB', ref: 'Dra. Castillo', ind: 'Cefalea crónica refractaria', notes: 'Acompañante puede entrar.', tech: 'Bobina de cabeza de 32 canales.', report: { findings: 'Parénquima encefálico de señal conservada. Sistema ventricular de tamaño y morfología normales. No se observan lesiones ocupantes de espacio ni áreas de restricción en difusión.', conclusion: 'RM de cerebro sin hallazgos patológicos.' } },
   { dni: '90000003', mod: 'DX', study: '420101', time: '08:10', care: 'AMB', ref: 'Dr. Navarro', ind: 'Tos persistente de 3 semanas', notes: 'Trae radiografía previa de 2024 para comparar.', tech: 'Proyecciones frente y perfil en bipedestación.', report: { findings: 'Campos pulmonares sin infiltrados ni consolidaciones. Senos costofrénicos libres. Silueta cardíaca de tamaño normal.', conclusion: 'Radiografía de tórax sin alteraciones.' } },
-  { dni: '90000002', mod: 'CT', study: '341002', time: '08:30', care: 'INT', ref: 'Dr. Ibáñez (Clínica Médica)', ind: 'Control de nódulo pulmonar', notes: 'Internado piso 3, cama 12. Viene en camilla. NO usar contraste iodado (alergia).', tech: 'TC sin contraste por antecedente alérgico. Cortes de 1 mm.', report: { findings: 'Nódulo sólido de 6 mm en lóbulo superior derecho, sin cambios respecto del estudio previo. No se observan adenomegalias mediastinales.', conclusion: 'Nódulo pulmonar estable. Sugiere control en 12 meses.' } },
-  { dni: '90000006', mod: 'CT', study: '341003', time: '09:00', care: 'AMB', ref: 'Dra. Peralta', ind: 'Dolor abdominal en fosa ilíaca derecha', notes: 'Diabético: confirmar suspensión de metformina 48 h posteriores al contraste.', tech: 'Contraste EV 100 ml + oral. Sin reacciones adversas.', report: { findings: 'Hígado, bazo y páncreas sin alteraciones. Apéndice cecal de calibre normal. Litiasis renal derecha de 4 mm no obstructiva.', conclusion: 'Litiasis renal derecha no obstructiva. Sin signos de apendicitis.' } },
-  { dni: '90000008', mod: 'DX', study: '420201', time: '09:10', care: 'AMB', ref: 'Dr. Correa (Traumatología)', ind: 'Lumbalgia mecánica', notes: 'Tiene prótesis de cadera: avisar en la toma.', tech: 'Se repitió la proyección lateral por rotación del paciente.', report: { findings: 'Rectificación de la lordosis lumbar. Disminución del espacio discal L4-L5 con osteofitos marginales.', conclusion: 'Cambios degenerativos lumbares, a predominio L4-L5.' } },
+  { dni: '90000002', mod: 'CT', study: '341002', time: '08:30', care: 'INT', ref: 'Dr. Ibáñez (Clínica Médica)', ind: 'Control de nódulo pulmonar', notes: 'Internado piso 3, cama 12. Viene en camilla.', tech: 'Cortes de 1 mm.', report: { findings: 'Nódulo sólido de 6 mm en lóbulo superior derecho, sin cambios respecto del estudio previo. No se observan adenomegalias mediastinales.', conclusion: 'Nódulo pulmonar estable. Sugiere control en 12 meses.' } },
+  { dni: '90000006', mod: 'CT', study: '341003', time: '09:00', care: 'AMB', ref: 'Dra. Peralta', ind: 'Dolor abdominal en fosa ilíaca derecha', notes: 'Diabético: suspender metformina 48 h después del contraste.', tech: 'Contraste oral 1 h antes.', report: { findings: 'Hígado, bazo y páncreas sin alteraciones. Apéndice cecal de calibre normal. Litiasis renal derecha de 4 mm no obstructiva.', conclusion: 'Litiasis renal derecha no obstructiva. Sin signos de apendicitis.' } },
+  { dni: '90000008', mod: 'DX', study: '420201', time: '09:10', care: 'AMB', ref: 'Dr. Correa (Traumatología)', ind: 'Lumbalgia mecánica', notes: null, tech: 'Se repitió la proyección lateral por rotación del paciente.', report: { findings: 'Rectificación de la lordosis lumbar. Disminución del espacio discal L4-L5 con osteofitos marginales.', conclusion: 'Cambios degenerativos lumbares, a predominio L4-L5.' } },
   { dni: '90000005', mod: 'MR', study: '340201', time: '09:30', care: 'AMB', ref: 'Dr. Correa (Traumatología)', ind: 'Lumbociatalgia izquierda', notes: 'Trae CD con RM anterior para comparar.', tech: 'Movimiento leve en secuencia T2 axial; se repitió.', report: { findings: 'Protrusión discal posterocentral L5-S1 que contacta la raíz S1 izquierda. Resto de los discos con señal conservada.', conclusion: 'Protrusión discal L5-S1 con contacto radicular S1 izquierdo.' } },
-  { dni: '90000010', mod: 'CT', study: '341001', time: '10:00', care: 'GUA', ref: 'Guardia (Dr. Rossi)', ind: 'Traumatismo de cráneo leve', notes: 'Viene de guardia: prioridad. Hipoacusia, hablarle de frente.', tech: 'TC de cerebro sin contraste. Paciente colaborador.', report: null },
-  { dni: '90000012', mod: 'MR', study: '340301', time: '10:30', care: 'AMB', ref: 'Dr. Correa (Traumatología)', ind: 'Sospecha de lesión de menisco interno', notes: 'Viene con muletas: ayudarlo a subir a la camilla.', tech: null, report: null },
-  { dni: '90000009', mod: 'DX', study: '420301', time: '11:00', care: 'AMB', ref: 'Dra. Paredes', ind: 'Gonalgia derecha', notes: null, tech: null, report: null },
-  { dni: '90000004', mod: 'CT', study: '341002', time: '11:30', care: 'AMB', ref: 'Dr. Ibáñez', ind: 'Disnea de esfuerzo', notes: 'Marcapasos: por eso TC y no RM. Usa silla de ruedas.', tech: null, report: null },
-  { dni: '90000011', mod: 'MR', study: '340102', time: '12:00', care: 'AMB', ref: 'Dra. Castillo', ind: 'Control de adenoma hipofisario', notes: 'Con gadolinio: confirmar creatinina antes de entrar. Ayuno de 4 h.', tech: null, report: null },
-  { dni: '90000007', mod: 'DX', study: '420101', time: '12:30', care: 'AMB', ref: 'Medicina laboral', ind: 'Examen preocupacional', notes: 'Preocupacional: entregar el resultado a la empresa.', tech: null, report: null },
+  { dni: '90000010', mod: 'CT', study: '341001', time: '10:00', care: 'GUA', ref: 'Guardia (Dr. Rossi)', ind: 'Traumatismo de cráneo leve', notes: 'Viene de guardia: prioridad. Hipoacusia, hablarle de frente.', tech: 'TC de cerebro sin contraste.', report: { findings: 'No se observan colecciones hemáticas intra ni extraaxiales. Línea media centrada. Sistema ventricular de tamaño normal.', conclusion: 'TC de cerebro sin lesiones traumáticas agudas.' } },
+  { dni: '90000012', mod: 'MR', study: '340301', time: '10:30', care: 'AMB', ref: 'Dr. Correa (Traumatología)', ind: 'Sospecha de lesión de menisco interno', notes: 'Viene con muletas: ayudarlo a subir a la camilla.', tech: 'Bobina de rodilla, secuencias de rutina.', report: { findings: 'Señal lineal en el cuerno posterior del menisco interno que contacta la superficie articular inferior. Ligamentos cruzados indemnes. Leve derrame articular.', conclusion: 'Ruptura del cuerno posterior del menisco interno.' } },
+  { dni: '90000009', mod: 'DX', study: '420301', time: '11:00', care: 'AMB', ref: 'Dra. Paredes', ind: 'Gonalgia derecha', notes: null, tech: 'Frente y perfil con carga.', report: { findings: 'Leve disminución del espacio articular femorotibial interno. Sin lesiones óseas agudas.', conclusion: 'Gonartrosis incipiente.' } },
+  { dni: '90000004', mod: 'CT', study: '341002', time: '11:30', care: 'AMB', ref: 'Dr. Ibáñez', ind: 'Disnea de esfuerzo', notes: 'Usa silla de ruedas: asistir en la transferencia.', tech: 'Paciente trasladado con tabla de transferencia.', report: { findings: 'Parénquima pulmonar sin consolidaciones. Leve aumento del índice cardiotorácico. Sin derrame pleural.', conclusion: 'Leve cardiomegalia. Sin hallazgos pulmonares agudos.' } },
+  { dni: '90000011', mod: 'MR', study: '340102', time: '12:00', care: 'AMB', ref: 'Dra. Castillo', ind: 'Control de adenoma hipofisario', notes: 'Ayuno de 4 h. Confirmar creatinina antes de entrar.', tech: 'Gadolinio macrocíclico 7 ml.', report: { findings: 'Hipófisis de altura conservada con lesión hipocaptante de 5 mm en el lóbulo derecho, sin cambios respecto del control previo. Tallo hipofisario centrado.', conclusion: 'Microadenoma hipofisario estable.' } },
+  { dni: '90000007', mod: 'DX', study: '420101', time: '12:30', care: 'AMB', ref: 'Medicina laboral', ind: 'Examen preocupacional', notes: 'Preocupacional: entregar el resultado a la empresa.', tech: 'Proyección PA en inspiración.', report: { findings: 'Campos pulmonares claros. Silueta cardíaca de tamaño normal. Estructuras óseas sin alteraciones.', conclusion: 'Radiografía de tórax normal.' } },
 ];
 
 // Padrón de pacientes inventados para el resto de los días (DNI 90001000+).
 const FIRST_F = ['María', 'Laura', 'Silvia', 'Paula', 'Gabriela', 'Natalia', 'Mónica', 'Romina', 'Julieta', 'Camila', 'Andrea', 'Verónica', 'Cecilia', 'Mariela', 'Agustina'];
 const FIRST_M = ['Juan', 'Carlos', 'Luis', 'Pablo', 'Sergio', 'Gustavo', 'Marcelo', 'Fernando', 'Nicolás', 'Matías', 'Ricardo', 'Alberto', 'Eduardo', 'Federico', 'Tomás'];
 const LAST = ['Gómez', 'Rodríguez', 'Fernández', 'López', 'Díaz', 'Martínez', 'Pérez', 'García', 'Sánchez', 'Romero', 'Torres', 'Álvarez', 'Ruiz', 'Ramírez', 'Flores', 'Acosta', 'Rojas', 'Herrera', 'Suárez', 'Ortiz', 'Ponce', 'Vega', 'Cabrera', 'Godoy', 'Arias'];
-const PATIENT_NOTES = [null, null, null, null, 'Hipertenso', 'Alergia a la penicilina', 'Claustrofobia leve', 'Usa audífonos', 'Diabético tipo 2', 'Movilidad reducida: usa bastón', null, null];
+const PATIENT_NOTES = [null, null, null, null, 'Hipertenso', 'Alergia a la penicilina', null, 'Usa audífonos', 'Diabético tipo 2', 'Movilidad reducida: usa bastón', null, null, null];
 const POOL_SIZE = 100;
 
 export const GENERATED_PATIENTS = Array.from({ length: POOL_SIZE }, (_, i) => {
@@ -62,7 +63,8 @@ export const GENERATED_PATIENTS = Array.from({ length: POOL_SIZE }, (_, i) => {
     insurance,
     affiliate_number: insurance === 'PART' ? null : String(70000000 + i * 37),
     weight_kg: 50 + ((i * 13) % 45),
-    notes: PATIENT_NOTES[i % PATIENT_NOTES.length],
+    conditions: conditionsForPool(i),
+    extra: PATIENT_NOTES[i % PATIENT_NOTES.length],
   };
 });
 
@@ -135,7 +137,13 @@ export async function createDemoAppointments(db, date, userId) {
     const r = mix(offset + 1000, index);
     if (weekday === 6 && item.mod !== 'DX') continue;
     if (offset !== 0 && r < 250) continue;
-    const patient = offset === 0 ? DEMO_PATIENTS.find((p) => p.dni === item.dni) : GENERATED_PATIENTS[(offset * 17 + index * 29 + 1000 * POOL_SIZE) % POOL_SIZE];
+    let patient = DEMO_PATIENTS.find((p) => p.dni === item.dni);
+    if (offset !== 0) {
+      // Rota el padrón; saltea pacientes que no pueden hacer el estudio (marcapasos → RM).
+      let k = (offset * 17 + index * 29 + 1000 * POOL_SIZE) % POOL_SIZE;
+      while (!canDo(GENERATED_PATIENTS[k].conditions, item.mod)) k = (k + 1) % POOL_SIZE;
+      patient = GENERATED_PATIENTS[k];
+    }
     items.push({
       index,
       r: mix(offset + 7, index + 300), // independiente del que decide si hay turno
@@ -156,7 +164,7 @@ export async function createDemoAppointments(db, date, userId) {
           `INSERT INTO patients (dni, first_name, last_name, birth_date, sex, phone, insurance_id, affiliate_number, weight_kg, notes)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dni) DO NOTHING`
         )
-        .bind(p.dni, p.first_name, p.last_name, p.birth_date, p.sex, `5492610${p.dni.slice(-6)}`, insuranceId(p.insurance), p.affiliate_number, p.weight_kg, p.notes)
+        .bind(p.dni, p.first_name, p.last_name, p.birth_date, p.sex, `5492610${p.dni.slice(-6)}`, insuranceId(p.insurance), p.affiliate_number, p.weight_kg, patientNotesFor(p.conditions, p.extra))
     )
   );
   const dnis = people.map((p) => p.dni);
@@ -182,6 +190,11 @@ export async function createDemoAppointments(db, date, userId) {
     }
 
     const status = statusFor(date, item, index, now, r);
+    const cond = conditionTexts(p.conditions, { mod: item.mod, contrast: !!study.contrast, zone: zoneOf(study.name) }, (n) => mix(offset + 31 * index, n));
+    const turnNotes = [cond.note, notes].filter(Boolean).join(' ') || null;
+    // La observación genérica se reemplaza si la condición trae la suya (para no contradecirse).
+    const techText = (cond.tech ? [offset === 0 ? techNotes : null, cond.tech] : [techNotes]).filter(Boolean).join(' ') || null;
+    const findings = item.report ? [cond.report, item.report.findings].filter(Boolean).join(' ') : null;
     const admitted = ['arrived', 'in_progress', ...DONE].includes(status);
     const started = ['in_progress', ...DONE].includes(status);
     const done = DONE.includes(status);
@@ -210,14 +223,14 @@ export async function createDemoAppointments(db, date, userId) {
           item.ref,
           item.ind,
           status === 'given' ? 0 : 1,
-          notes,
+          turnNotes,
           status === 'cancelled' ? 'El paciente reprogramó por teléfono' : null,
           accession,
           admitted ? newDicomUid() : null,
           done ? 'received' : 'pending',
           done ? (item.mod === 'DX' ? 2 : { MR: 240, CT: 380 }[item.mod] + (r % 60)) : null,
           started ? tech?.id ?? null : null,
-          done ? techNotes : null,
+          done ? techText : null,
           admitted ? toUtc(date, plus(item.time, -12)) : null,
           started ? toUtc(date, plus(item.time, 4)) : null,
           done ? toUtc(date, plus(item.time, study.duration_minutes + 6)) : null,
@@ -238,7 +251,7 @@ export async function createDemoAppointments(db, date, userId) {
           .bind(
             radiologist?.id ?? null,
             `${study.name}.`,
-            item.report.findings,
+            findings,
             signed ? item.report.conclusion : null,
             signed ? 'signed' : 'draft',
             signed ? toUtc(date, plus(item.time, 120)) : null,

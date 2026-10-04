@@ -68,6 +68,19 @@ El estado depende del día: pasados → informados/entregados (con algún
 ausente o cancelado), hoy → según la hora, futuros → dados/confirmados.
 Se puede apretar más de una vez: no duplica.
 
+Los pacientes tienen, en forma arbitraria (~60 %), condiciones clínicas que
+aparecen repartidas y coherentes en todo el circuito según el estudio:
+**hemodiálisis**, **marcapasos** (común → nunca RM; o MR condicional con
+protocolo de cardiología), **prótesis metálica**, **alergia al iodo**,
+**claustrofobia** y **glaucoma**. Por ejemplo, un alérgico al iodo con TC
+con contraste tiene en la ficha "ALERGIA AL IODO", en la nota del turno la
+premedicación, en la observación técnica "premedicado según protocolo…" y
+en el informe la mención del contraste; un paciente con glaucoma y TC de
+abdomen tiene "NO administrar Buscapina" y el informe menciona el artefacto
+por peristaltismo. La nota del turno aparece siempre que aplique; la
+observación técnica y la frase del informe, no siempre (ver
+`backend/src/utils/demoConditions.js`).
+
 Los estudios con imágenes en el PACS se abren en el **visor de
 demostración** (`/visor/:id`, botón **VM**): imágenes **ficticias** generadas
 en el navegador según modalidad y zona (cerebro, columna, rodilla, tórax,
