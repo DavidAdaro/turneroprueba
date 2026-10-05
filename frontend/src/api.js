@@ -79,6 +79,7 @@ export const api = {
   getApiKeyScopes: () => request('/api-keys/scopes'),
   getApiKeys: () => request('/api-keys'),
   createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
+  updateApiKeyScopes: (id, scopes) => request(`/api-keys/${id}`, { method: 'PATCH', body: { scopes } }),
   revokeApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
 
   createDemoAppointments: (date) => request('/demo/appointments', { method: 'POST', body: { date } }),

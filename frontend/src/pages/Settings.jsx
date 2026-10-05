@@ -397,9 +397,20 @@ function ApiKeysTab() {
   const [created, setCreated] = useState(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState(null); // { id, scopes }
   if (loadError) return <ErrorMsg error={loadError} />;
   if (!data) return null;
   const [keys, scopeLabels] = data;
+  const saveScopes = async () => {
+    setError('');
+    try {
+      await api.updateApiKeyScopes(editing.id, editing.scopes);
+      setEditing(null);
+      reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   const toggle = (s) => setScopes((list) => (list.includes(s) ? list.filter((x) => x !== s) : [...list, s]));
   const create = async (e) => {
@@ -478,7 +489,35 @@ function ApiKeysTab() {
               <tr key={k.id} className={k.revoked_at ? 'opacity-50' : ''}>
                 <td className="td font-medium">{k.name}</td>
                 <td className="td font-mono text-xs">{k.key_prefix}…</td>
-                <td className="td text-xs">{k.scopes.join(', ')}</td>
+                <td className="td text-xs">
+                  {editing?.id === k.id ? (
+                    <div className="space-y-0.5">
+                      {Object.keys(scopeLabels).map((sc) => (
+                        <label key={sc} className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={editing.scopes.includes(sc)}
+                            onChange={() =>
+                              setEditing((ed) => ({ ...ed, scopes: ed.scopes.includes(sc) ? ed.scopes.filter((x) => x !== sc) : [...ed.scopes, sc] }))
+                            }
+                          />
+                          <code>{sc}</code>
+                        </label>
+                      ))}
+                      <div className="flex gap-1 pt-1">
+                        <button className="btn-primary px-2 py-0.5 text-xs" onClick={saveScopes} disabled={!editing.scopes.length}>Guardar</button>
+                        <button className="btn-secondary px-2 py-0.5 text-xs" onClick={() => setEditing(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {k.scopes.join(', ')}
+                      {!k.revoked_at && (
+                        <button className="ml-2 text-blue-700 hover:underline" onClick={() => setEditing({ id: k.id, scopes: k.scopes })}>editar</button>
+                      )}
+                    </>
+                  )}
+                </td>
                 <td className="td text-xs">{formatDateTime(k.created_at)}{k.created_by_name && <div className="text-slate-500">{k.created_by_name}</div>}</td>
                 <td className="td text-xs">{k.last_used_at ? formatDateTime(k.last_used_at) : 'Nunca'}</td>
                 <td className="td text-right">
@@ -533,7 +572,8 @@ function ClinicTab() {
       <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
         <b>Integración con sistemas externos</b> (servidor a servidor, header <code>X-API-Key</code> con una key generada en la pestaña <b>API keys</b>):
         <ul className="mt-1 list-disc pl-5">
-          <li><code>GET /api/integration/schedule?date=AAAA-MM-DD</code> → turnero del día (permiso <code>schedule:read</code>).</li>
+          <li><code>GET /api/integration/schedule?date=AAAA-MM-DD</code> → turnero del día (permiso <code>schedule:read</code>; con <code>clinical:read</code> agrega los datos clínicos de cada turno).</li>
+          <li><code>GET /api/integration/patients/&lt;DNI&gt;</code> → paciente con observaciones e historial de estudios: indicación, notas del turno, observaciones del técnico e informe firmado (permiso <code>clinical:read</code>).</li>
           <li><code>GET /api/integration/worklist?ae_title=RM15T</code> → Modality Worklist (JSON con atributos DICOM) de los pacientes admitidos (permiso <code>worklist:read</code>).</li>
           <li><code>POST /api/integration/study-received</code> <code>{'{ accession_number, study_instance_uid, image_count }'}</code> → el PACS avisa que recibió el estudio (permiso <code>pacs:write</code>).</li>
           <li>Con <code>PACS_MODE</code> sin configurar, la recepción en PACS se simula al finalizar el estudio (modo prueba).</li>

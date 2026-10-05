@@ -45,6 +45,18 @@ apiKeys.post('/', async (c) => {
   return c.json({ ...serialize(row), key }, 201);
 });
 
+// Cambiar los permisos de una key activa (sin regenerarla).
+apiKeys.patch('/:id', async (c) => {
+  const body = await readJson(c);
+  const scopes = Array.isArray(body.scopes) ? [...new Set(body.scopes.filter((s) => s in SCOPES))] : [];
+  if (!scopes.length) return c.json({ error: 'Elegí al menos un permiso' }, 400);
+  const row = await c.env.DB.prepare('UPDATE api_keys SET scopes = ? WHERE id = ? AND revoked_at IS NULL RETURNING *')
+    .bind(JSON.stringify(scopes), c.req.param('id'))
+    .first();
+  if (!row) return c.json({ error: 'API key no encontrada o revocada' }, 404);
+  return c.json(serialize(row));
+});
+
 // Revocar es inmediato y no se puede deshacer.
 apiKeys.delete('/:id', async (c) => {
   const res = await c.env.DB.prepare("UPDATE api_keys SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL")

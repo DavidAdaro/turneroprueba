@@ -166,13 +166,15 @@ En **Configuración → API keys** el administrador genera keys para otros
 sistemas (InPatient, el PACS, un broker de worklist). Cada key tiene un
 nombre y solo los permisos que se le marcan. Se muestra completa **una sola
 vez** al crearla (en la base queda solo su hash SHA-256), se ve cuándo se
-usó por última vez y se puede revocar en el acto.
+usó por última vez, se le pueden cambiar los permisos y se puede revocar en
+el acto.
 
 | Permiso | Endpoint |
 | --- | --- |
 | `schedule:read` | `GET /api/integration/schedule?date=AAAA-MM-DD[&modality=MR][&ae_title=RM15T]` — turnero del día: paciente, estudio, equipo, cobertura, horarios, estado, N° de acceso, estado de PACS e informe. |
 | `worklist:read` | `GET /api/integration/worklist?ae_title=RM15T[&date=]` — **Modality Worklist** en JSON con atributos DICOM (`AccessionNumber`, `StudyInstanceUID`, `PatientID`, `PatientName`, `ScheduledProcedureStepSequence`, …) de los pacientes admitidos o en sala. Pensado para que un broker MWL (plugin de Orthanc, dcm4chee, etc.) la sirva a la modalidad, así el estudio llega al PACS con el N° de acceso y el UID del RIS. |
 | `pacs:write` | `POST /api/integration/study-received` con `{ "accession_number", "study_instance_uid", "image_count" }` — el PACS avisa que recibió el estudio; si el técnico no lo había finalizado, pasa a Realizado. |
+| `clinical:read` | Datos clínicos. En `GET /api/integration/schedule` agrega a cada turno un objeto `clinical` con `patient_notes` (observaciones del paciente: alergias, marcapasos, claustrofobia…), `clinical_indication` (diagnóstico presuntivo), `appointment_notes` (notas del turno), `technician_notes` (observaciones del técnico) y `report` (informe **firmado**: técnica, hallazgos, conclusión, médico y matrícula; un borrador figura solo como `{ "status": "draft" }`). Además habilita `GET /api/integration/patients/<DNI>`: paciente con sus observaciones y el historial de estudios con esos mismos datos. |
 
 Todas se llaman servidor a servidor con el header `X-API-Key`:
 

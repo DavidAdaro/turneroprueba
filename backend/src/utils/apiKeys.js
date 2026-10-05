@@ -5,6 +5,7 @@ export const SCOPES = {
   'schedule:read': 'Leer el turnero del día (turnos con paciente, estudio y estado)',
   'worklist:read': 'Leer la Modality Worklist (pacientes admitidos por equipo)',
   'pacs:write': 'Avisar que el PACS recibió un estudio',
+  'clinical:read': 'Leer datos clínicos: observaciones del paciente, indicación, notas del turno, observaciones del técnico e informe firmado',
 };
 
 const bytesToHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');

@@ -108,9 +108,48 @@ integration.post('/study-received', requireScope('pacs:write'), async (c) => {
   return c.json({ ok: true, appointment_id: appt.id });
 });
 
+// ---- Datos clínicos (permiso clinical:read) ----
+// Solo se expone el texto de informes FIRMADOS; un borrador figura como
+// { status: 'draft' } sin contenido.
+async function signedReports(db, where, params) {
+  const { results } = await db
+    .prepare(
+      `SELECT r.appointment_id, r.technique, r.findings, r.conclusion, r.signed_at, u.name AS radiologist_name, u.license_number AS radiologist_license
+       FROM reports r JOIN appointments a ON a.id = r.appointment_id LEFT JOIN users u ON u.id = r.radiologist_id
+       WHERE r.status = 'signed' AND ${where}`
+    )
+    .bind(...params)
+    .all();
+  return new Map(results.map((r) => [r.appointment_id, r]));
+}
+
+function clinicalOf(a, reports) {
+  const r = reports.get(a.id);
+  return {
+    patient_notes: a.patient_notes, // alergias, marcapasos, claustrofobia…
+    clinical_indication: a.clinical_indication, // diagnóstico presuntivo de la orden
+    appointment_notes: a.notes, // notas del turno
+    technician_notes: a.technician_notes, // observaciones del técnico
+    report: r
+      ? {
+          status: 'signed',
+          technique: r.technique,
+          findings: r.findings,
+          conclusion: r.conclusion,
+          signed_at: r.signed_at,
+          radiologist: r.radiologist_name,
+          radiologist_license: r.radiologist_license,
+        }
+      : a.report_status === 'draft'
+        ? { status: 'draft' }
+        : null,
+  };
+}
+
 // Turnero del día para sistemas externos (p. ej. InPatient): un turno por
 // elemento con paciente, estudio, cobertura, horarios y estado. Filtros
-// opcionales: date (AAAA-MM-DD, por defecto hoy), modality, ae_title.
+// opcionales: date (AAAA-MM-DD, por defecto hoy), modality, ae_title. Si la
+// key además tiene clinical:read, cada turno trae "clinical".
 integration.get('/schedule', requireScope('schedule:read'), async (c) => {
   const date = isDate(c.req.query('date')) ? c.req.query('date') : nowLocal().date;
   const params = [date];
@@ -124,9 +163,12 @@ integration.get('/schedule', requireScope('schedule:read'), async (c) => {
     params.push(c.req.query('ae_title'));
   }
   const { results } = await c.env.DB.prepare(`${APPOINTMENT_SELECT} WHERE ${where} ORDER BY a.start_time, e.name`).bind(...params).all();
+  const clinical = c.get('apiScopes').includes('clinical:read');
+  const reports = clinical ? await signedReports(c.env.DB, 'a.date = ?', [date]) : null;
   return c.json({
     date,
     appointments: results.map((a) => ({
+      ...(clinical ? { clinical: clinicalOf(a, reports) } : {}),
       appointment_id: a.id,
       date: a.date,
       start_time: a.start_time,
@@ -155,6 +197,51 @@ integration.get('/schedule', requireScope('schedule:read'), async (c) => {
       completed_at: a.completed_at,
       pacs_status: a.pacs_status,
       report_status: a.report_status,
+    })),
+  });
+});
+
+// Paciente por DNI con sus observaciones y el historial de estudios
+// (indicación, notas del turno, observaciones del técnico e informe).
+integration.get('/patients/:dni', requireScope('clinical:read'), async (c) => {
+  const db = c.env.DB;
+  const dni = c.req.param('dni').replace(/\D/g, '');
+  const patient = await db
+    .prepare('SELECT p.*, i.name AS insurance_name, i.code AS insurance_code FROM patients p LEFT JOIN insurances i ON i.id = p.insurance_id WHERE p.dni = ?')
+    .bind(dni)
+    .first();
+  if (!patient) return c.json({ error: 'Paciente no encontrado' }, 404);
+  const { results } = await db
+    .prepare(`${APPOINTMENT_SELECT} WHERE a.patient_id = ? ORDER BY a.date DESC, a.start_time DESC LIMIT 100`)
+    .bind(patient.id)
+    .all();
+  const reports = await signedReports(db, 'a.patient_id = ?', [patient.id]);
+  return c.json({
+    patient: {
+      dni: patient.dni,
+      last_name: patient.last_name,
+      first_name: patient.first_name,
+      birth_date: patient.birth_date,
+      sex: patient.sex,
+      phone: patient.phone,
+      weight_kg: patient.weight_kg,
+      notes: patient.notes,
+      insurance: patient.insurance_name ? { name: patient.insurance_name, code: patient.insurance_code, plan: patient.insurance_plan, affiliate_number: patient.affiliate_number } : null,
+    },
+    appointments: results.map((a) => ({
+      appointment_id: a.id,
+      date: a.date,
+      start_time: a.start_time,
+      status: a.status,
+      accession_number: a.accession_number,
+      study_instance_uid: a.study_instance_uid,
+      study: { code: a.study_code, name: a.study_name, modality: a.modality, contrast: !!a.study_contrast },
+      equipment: a.equipment_name,
+      referring_physician: a.referring_physician,
+      clinical_indication: a.clinical_indication,
+      appointment_notes: a.notes,
+      technician_notes: a.technician_notes,
+      report: clinicalOf(a, reports).report,
     })),
   });
 });
