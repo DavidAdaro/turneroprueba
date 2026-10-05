@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, requireRole, userOf } from '../middleware/auth';
 import { clean, readJson, toBool, toInt } from '../utils/http';
 import { addDays, fromMinutes, isDate, isTime, nowLocal, toMinutes } from '../utils/time';
+import { normText, sqlNorm } from '../utils/search';
 import { buildDaySlots, findFreeSlots, schedulesForDate, validateBooking } from '../utils/slots';
 import { APPOINTMENT_SELECT, PENDING_STATUSES, loadAgendaData, logEvent } from '../utils/agenda';
 import { newDicomUid, nextAccessionNumber, pacsMode, simulatePacsReception } from '../utils/pacs';
@@ -78,9 +79,9 @@ appointments.get('/list', async (c) => {
 appointments.get('/search', async (c) => {
   const q = (c.req.query('q') || '').trim();
   if (q.length < 2) return c.json([]);
-  const like = `%${q.toLowerCase()}%`;
+  const like = `%${normText(q)}%`;
   const { results } = await c.env.DB.prepare(
-    `${APPOINTMENT_SELECT} WHERE a.accession_number = ? OR p.dni = ? OR lower(p.last_name || ' ' || p.first_name) LIKE ?
+    `${APPOINTMENT_SELECT} WHERE a.accession_number = ? OR p.dni = ? OR ${sqlNorm("p.last_name || ' ' || p.first_name")} LIKE ?
      ORDER BY a.date DESC, a.start_time DESC LIMIT 50`
   )
     .bind(q, q.replace(/\D/g, ''), like)

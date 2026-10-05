@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Pencil } from 'lucide-react';
+import RebookModal from '../components/RebookModal';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../components/useData';
@@ -19,6 +20,7 @@ export default function PatientDetail() {
   const { data: p, error, reload } = useData(() => api.getPatient(id), [id]);
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [rebook, setRebook] = useState(false);
 
   if (error) return <ErrorMsg error={error} />;
   if (!p) return <p className="text-sm text-slate-500">Cargando…</p>;
@@ -28,8 +30,11 @@ export default function PatientDetail() {
       <div className="flex items-center gap-3">
         <button className="btn-secondary px-2" onClick={() => navigate(-1)}><ArrowLeft size={16} /></button>
         <h1 className="text-xl font-semibold">{p.last_name}, {p.first_name}</h1>
+        {['admin', 'reception'].includes(user.role) && (
+          <button className="btn-primary ml-auto" onClick={() => setRebook(true)}><CalendarPlus size={14} /> Nuevo turno</button>
+        )}
         {user.role !== 'radiologist' && (
-          <button className="btn-secondary ml-auto" onClick={() => setEditing(true)}><Pencil size={14} /> Editar</button>
+          <button className={`btn-secondary ${['admin', 'reception'].includes(user.role) ? '' : 'ml-auto'}`} onClick={() => setEditing(true)}><Pencil size={14} /> Editar</button>
         )}
       </div>
       <div className="card grid gap-x-6 gap-y-1 p-4 text-sm sm:grid-cols-3">
@@ -74,6 +79,18 @@ export default function PatientDetail() {
         <Modal title="Editar paciente" onClose={() => setEditing(false)} wide>
           <PatientForm patient={p} insurances={insurances} onSaved={() => { setEditing(false); reload(); }} onCancel={() => setEditing(false)} />
         </Modal>
+      )}
+      {rebook && (
+        <RebookModal
+          patient={p}
+          defaults={{ equipment_id: p.appointments[0]?.equipment_id }}
+          onClose={() => setRebook(false)}
+          onBooked={(n) => {
+            setRebook(false);
+            reload();
+            setOpenId(n.id);
+          }}
+        />
       )}
       {openId && <AppointmentModal id={openId} onClose={() => setOpenId(null)} onChanged={reload} />}
     </div>

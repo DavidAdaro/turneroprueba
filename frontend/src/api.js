@@ -11,7 +11,12 @@ async function request(path, { method = 'GET', body } = {}) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
   if (res.status === 401 && path !== '/auth/login') onUnauthorized();
-  if (!res.ok) throw new Error((data && data.error) || `Error ${res.status}`);
+  if (!res.ok) {
+    const err = new Error((data && data.error) || `Error ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 

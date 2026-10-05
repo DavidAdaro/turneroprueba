@@ -23,6 +23,7 @@ export default function PatientForm({ patient, insurances, initial = {}, onSaved
     return Object.fromEntries(Object.keys(EMPTY).map((k) => [k, base[k] ?? '']));
   });
   const [error, setError] = useState('');
+  const [existingId, setExistingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -30,11 +31,13 @@ export default function PatientForm({ patient, insurances, initial = {}, onSaved
     e.preventDefault();
     setSaving(true);
     setError('');
+    setExistingId(null);
     try {
       const saved = patient ? await api.updatePatient(patient.id, form) : await api.createPatient(form);
       onSaved(saved);
     } catch (err) {
       setError(err.message);
+      if (err.status === 409 && err.data?.patient_id && !patient) setExistingId(err.data.patient_id);
     } finally {
       setSaving(false);
     }
@@ -93,6 +96,21 @@ export default function PatientForm({ patient, insurances, initial = {}, onSaved
         <textarea className="input" rows={2} value={form.notes} onChange={set('notes')} />
       </Field>
       <ErrorMsg error={error} />
+      {existingId && (
+        <button
+          type="button"
+          className="btn-secondary w-full"
+          onClick={async () => {
+            try {
+              onSaved(await api.getPatient(existingId));
+            } catch (err) {
+              setError(err.message);
+            }
+          }}
+        >
+          Usar el paciente que ya existe con ese DNI
+        </button>
+      )}
       <div className="flex justify-end gap-2">
         {onCancel && (
           <button type="button" className="btn-secondary" onClick={onCancel}>

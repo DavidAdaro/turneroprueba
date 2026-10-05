@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, ExternalLink, MessageCircle, Printer } from 'lucide-react';
+import { CalendarClock, CalendarPlus, ExternalLink, MessageCircle, Printer } from 'lucide-react';
+import RebookModal from './RebookModal';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useData } from './useData';
@@ -19,6 +20,8 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [free, setFree] = useState(null);
+  const [rebook, setRebook] = useState(false);
+  const [booked, setBooked] = useState(null);
 
   const can = (...roles) => roles.includes(user.role);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -312,6 +315,11 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
           {can('admin', 'radiologist') && a.status === 'completed' && (
             <Link className="btn-primary" to={`/informes/${a.id}`}>Informar</Link>
           )}
+          {can('admin', 'reception') && (
+            <button className="btn-secondary" onClick={() => setRebook(true)}>
+              <CalendarPlus size={15} /> Nuevo turno para el paciente
+            </button>
+          )}
           {['reported', 'delivered'].includes(a.status) && (
             <Link className="btn-secondary" to={`/informe/${a.id}/imprimir`} target="_blank">
               <Printer size={15} /> Imprimir informe
@@ -321,6 +329,31 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
             <button className="btn-success" onClick={() => openMode('deliver')}>Entregar</button>
           )}
         </div>
+      )}
+
+      {booked && (
+        <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          Turno nuevo dado: {booked.study_name} el {booked.date.split('-').reverse().join('/')} a las {booked.start_time} ({booked.equipment_name}).
+        </div>
+      )}
+      {rebook && (
+        <RebookModal
+          patient={{
+            id: a.patient_id,
+            dni: a.dni,
+            first_name: a.patient_first_name,
+            last_name: a.patient_last_name,
+            insurance_id: a.insurance_id,
+            notes: a.patient_notes,
+          }}
+          defaults={{ equipment_id: a.equipment_id, referring_physician: a.referring_physician }}
+          onClose={() => setRebook(false)}
+          onBooked={(n) => {
+            setRebook(false);
+            setBooked(n);
+            onChanged?.(n);
+          }}
+        />
       )}
 
       <details className="mt-4 text-sm">

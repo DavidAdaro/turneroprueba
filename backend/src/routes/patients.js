@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { buildUpdate, clean, readJson, toInt } from '../utils/http';
 import { isDate } from '../utils/time';
+import { normText, sqlNorm } from '../utils/search';
 
 const patients = new Hono();
 patients.use('*', requireAuth);
@@ -32,9 +33,9 @@ patients.get('/', async (c) => {
     return c.json(results);
   }
   const dni = normDni(q);
-  const like = `%${q.toLowerCase()}%`;
+  const like = `%${normText(q)}%`;
   const { results } = await c.env.DB.prepare(
-    `${SELECT} WHERE (? != '' AND p.dni LIKE ?) OR lower(p.last_name || ' ' || p.first_name) LIKE ? OR lower(p.first_name || ' ' || p.last_name) LIKE ?
+    `${SELECT} WHERE (? != '' AND p.dni LIKE ?) OR ${sqlNorm("p.last_name || ' ' || p.first_name")} LIKE ? OR ${sqlNorm("p.first_name || ' ' || p.last_name")} LIKE ?
      ORDER BY p.last_name, p.first_name LIMIT ?`
   )
     .bind(dni, `${dni}%`, like, like, limit)

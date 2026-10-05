@@ -4,6 +4,7 @@ import {
   ArrowDownCircle,
   ArrowRightCircle,
   ArrowUpCircle,
+  CalendarPlus,
   ChevronLeft,
   ChevronRight,
   FileCheck2,
@@ -26,6 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../components/useData';
 import { useCatalog } from '../components/useCatalogs';
 import AppointmentModal from '../components/AppointmentModal';
+import RebookModal from '../components/RebookModal';
 import { STATUS, addDays, age, longDate, today, viewerUrl, whatsappLink } from '../utils';
 
 // Color de fondo de cada fila según el estado del turno (estilo planilla).
@@ -70,6 +72,7 @@ export default function Turnero() {
   const [modality, setModality] = useState('');
   const [hideCancelled, setHideCancelled] = useState(true);
   const [open, setOpen] = useState(null);
+  const [rebook, setRebook] = useState(null);
   const [error, setError] = useState('');
   const { data, reload } = useData(() => api.listAppointments({ from: date, to: date, modality: modality || undefined }), [date, modality]);
 
@@ -355,6 +358,11 @@ export default function Turnero() {
                       >
                         <Undo2 size={24} />
                       </Icon>
+                      {can('admin', 'reception') && (
+                        <Icon title="Nuevo turno para este paciente" onClick={() => setRebook(a)}>
+                          <CalendarPlus size={22} />
+                        </Icon>
+                      )}
                       <Icon title="Historial del turno" onClick={() => setOpen({ id: a.id })}>
                         <List size={22} />
                       </Icon>
@@ -377,6 +385,25 @@ export default function Turnero() {
         )}
       </div>
 
+      {rebook && (
+        <RebookModal
+          patient={{
+            id: rebook.patient_id,
+            dni: rebook.dni,
+            first_name: rebook.patient_first_name,
+            last_name: rebook.patient_last_name,
+            insurance_id: rebook.insurance_id,
+            notes: rebook.patient_notes,
+          }}
+          defaults={{ equipment_id: rebook.equipment_id, referring_physician: rebook.referring_physician }}
+          onClose={() => setRebook(null)}
+          onBooked={(n) => {
+            setRebook(null);
+            reload();
+            setOpen({ id: n.id });
+          }}
+        />
+      )}
       {open && <AppointmentModal id={open.id} initialMode={open.mode} onClose={() => setOpen(null)} onChanged={reload} />}
     </div>
   );
