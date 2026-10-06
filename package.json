@@ -5,7 +5,8 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "reset-db": "node scripts/setup.mjs --reset",
-    "start": "node scripts/start.mjs"
+    "start": "node scripts/start.mjs",
+    "stop": "node scripts/stop.mjs"
   },
   "engines": {
     "node": ">=18"

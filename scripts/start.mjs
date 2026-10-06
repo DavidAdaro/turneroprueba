@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PORTS, inUse } from './ports.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const needsSetup = ['backend/node_modules', 'frontend/node_modules', 'backend/.dev.vars', 'backend/.wrangler/state/v3/d1'].some(
@@ -15,13 +16,28 @@ if (needsSetup) {
   if (r.status !== 0) process.exit(r.status || 1);
 }
 
+// Si quedó corriendo otra copia (otra ventana con npm run dev), avisar en vez de fallar a medias.
+const busy = [];
+for (const [name, port] of Object.entries(PORTS)) if (await inUse(port)) busy.push(`${port} (${name})`);
+if (busy.length) {
+  console.log(`\n\x1b[33m✘ Ya hay algo usando el puerto ${busy.join(' y ')}.\x1b[0m
+  Seguramente quedó abierta otra ventana con el backend o el frontend (npm run dev).
+  Cerrala con Ctrl+C, o apagá lo que haya quedado con:
+
+    npm run stop
+
+  y después volvé a correr npm start.
+`);
+  process.exit(1);
+}
+
 const COLORS = { backend: '\x1b[36m', frontend: '\x1b[35m' };
 const children = [];
 let ready = { backend: false, frontend: false };
 let announced = false;
 
 function start(name, cwd) {
-  const child = spawn('npm', ['run', 'dev'], {
+  const child = spawn('npm run dev', {
     cwd: join(root, cwd),
     shell: true,
     // En Linux/Mac, grupo de procesos propio para poder cortar npm y sus hijos juntos.

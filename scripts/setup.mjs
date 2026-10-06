@@ -16,7 +16,7 @@ const reset = process.argv.includes('--reset');
 
 function run(cmd, args, cwd) {
   console.log(`\n> ${cmd} ${args.join(' ')}   (${cwd.replace(root, '.') || '.'})`);
-  const r = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: true });
+  const r = spawnSync([cmd, ...args].join(' '), { cwd, stdio: 'inherit', shell: true });
   if (r.status !== 0) {
     console.error(`\n✘ Falló: ${cmd} ${args.join(' ')}`);
     process.exit(r.status || 1);
