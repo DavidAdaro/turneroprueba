@@ -112,20 +112,26 @@ Fechas y horas se guardan como hora local del centro
 
 ## Correr en local
 
-```bash
-# Backend
-cd backend
-npm install
-cp .dev.vars.example .dev.vars        # y completar los secretos
-npm run db:schema:local
-npm run db:seed:local
-npm run dev                            # http://localhost:8788
+Todo corre en tu compu (Windows, Mac o Linux); solo hace falta
+[Node.js](https://nodejs.org) 18 o superior. Desde la carpeta del proyecto:
 
-# Frontend (otra terminal)
-cd frontend
-npm install
-npm run dev                            # http://localhost:5180
+```bash
+npm start
 ```
+
+La primera vez prepara todo solo (instala dependencias, crea
+`backend/.dev.vars` con un secreto propio y la base local con datos de
+prueba) y después levanta backend y frontend juntos en la misma ventana.
+Abrí **http://localhost:5180**. `Ctrl+C` corta los dos.
+
+| Comando | Qué hace |
+| --- | --- |
+| `npm start` | Levanta backend (http://localhost:8788) y frontend (http://localhost:5180). |
+| `npm run setup` | Instala lo que falte y actualiza la base local **sin borrar datos** (correrlo después de un `git pull`). |
+| `npm run reset-db` | Borra la base local y la crea de nuevo desde cero con los datos de prueba. |
+
+La base es un SQLite local (D1 simulado por wrangler) en
+`backend/.wrangler/`; no se conecta a ningún servicio externo.
 
 Usa los puertos 8788 (backend) y 5180 (frontend) para no chocar con
 `organizacionturnos` (InPatient), que usa 8787 y 5173; se pueden correr los dos a la vez.

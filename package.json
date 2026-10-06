@@ -1,0 +1,13 @@
+{
+  "name": "mini-ris-turnero",
+  "private": true,
+  "description": "Mini RIS · Turnero de Imágenes. Todo corre en local: npm run setup y npm start.",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "reset-db": "node scripts/setup.mjs --reset",
+    "start": "node scripts/start.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
