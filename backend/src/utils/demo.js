@@ -224,7 +224,7 @@ export async function createDemoAppointments(db, date, userId) {
   const dnis = people.map((p) => p.dni);
   const [{ results: patients }, { results: existing }, firstAccession] = await Promise.all([
     db.prepare(`SELECT id, dni, insurance_id FROM patients WHERE dni IN (${dnis.map(() => '?').join(',')})`).bind(...dnis).all(),
-    db.prepare('SELECT patient_id, start_time FROM appointments WHERE date = ?').bind(date).all(),
+    db.prepare("SELECT patient_id, equipment_id, start_time, end_time FROM appointments WHERE date = ? AND status != 'cancelled'").bind(date).all(),
     nextAccessionNumber(db, date),
   ]);
   const [prefix, firstSeq] = firstAccession.split('-');
@@ -237,13 +237,32 @@ export async function createDemoAppointments(db, date, userId) {
     const patient = patients.find((x) => x.dni === p.dni);
     const eq = equipment.find((e) => e.modality === item.mod);
     const study = studies.find((x) => x.code === item.study) || studies.find((x) => x.modality === item.mod);
-    // No duplicar: mismo paciente u horario ocupado en ese equipo.
-    if (!patient || !eq || !study || existing.some((e) => e.patient_id === patient.id || e.start_time === item.time)) {
+    // Datos mínimos para poder dar el turno.
+    if (!patient || !eq || !study) {
+      skipped++;
+      continue;
+    }
+    let time = item.time;
+    if (pool) {
+      // Con pacientes propios se SUMAN turnos a lo que ya haya: si el
+      // horario del equipo está ocupado se busca el siguiente libre (de a
+      // 10 min). Un paciente no repite turno en el mismo día.
+      const dur = study.duration_minutes;
+      const clash = (t) =>
+        existing.some((e) => e.equipment_id === eq.id && toMinutes(e.start_time) < toMinutes(t) + dur && toMinutes(t) < toMinutes(e.end_time));
+      for (let k = 0; k < 60 && clash(time); k++) time = plus(time, 10);
+      if (existing.some((e) => e.patient_id === patient.id) || clash(time) || toMinutes(time) + dur > 20 * 60) {
+        skipped++;
+        continue;
+      }
+      existing.push({ patient_id: patient.id, equipment_id: eq.id, start_time: time, end_time: plus(time, dur) });
+    } else if (existing.some((e) => e.patient_id === patient.id || e.start_time === item.time)) {
+      // No duplicar: mismo paciente u horario ocupado.
       skipped++;
       continue;
     }
 
-    const status = statusFor(date, item, index, now, r);
+    const status = statusFor(date, { ...item, time }, index, now, r);
     const cond = conditionTexts(p.conditions, { mod: item.mod, contrast: !!study.contrast, zone: zoneOf(study.name) }, (n) => mix(offset + 31 * index, n));
     const turnNotes = [cond.note, notes].filter(Boolean).join(' ') || null;
     // La observación genérica se reemplaza si la condición trae la suya (para no contradecirse).
@@ -268,8 +287,8 @@ export async function createDemoAppointments(db, date, userId) {
           patient.id,
           study.id,
           date,
-          item.time,
-          plus(item.time, study.duration_minutes),
+          time,
+          plus(time, study.duration_minutes),
           status,
           offset === 0 ? item.care : r % 9 === 0 ? 'INT' : r % 13 === 0 ? 'GUA' : 'AMB',
           patient.insurance_id,
@@ -285,10 +304,10 @@ export async function createDemoAppointments(db, date, userId) {
           done ? ({ DX: 2, MG: 4 }[item.mod] ?? { MR: 240, CT: 380, US: 18 }[item.mod] + (r % 60)) : null,
           started ? tech?.id ?? null : null,
           done ? techText : null,
-          admitted ? toUtc(date, plus(item.time, -12)) : null,
-          started ? toUtc(date, plus(item.time, 4)) : null,
-          done ? toUtc(date, plus(item.time, study.duration_minutes + 6)) : null,
-          status === 'delivered' ? toUtc(date, plus(item.time, 300)) : null,
+          admitted ? toUtc(date, plus(time, -12)) : null,
+          started ? toUtc(date, plus(time, 4)) : null,
+          done ? toUtc(date, plus(time, study.duration_minutes + 6)) : null,
+          status === 'delivered' ? toUtc(date, plus(time, 300)) : null,
           status === 'delivered' ? 'Paciente' : null,
           userId
         )
@@ -308,7 +327,7 @@ export async function createDemoAppointments(db, date, userId) {
             findings,
             signed ? item.report.conclusion : null,
             signed ? 'signed' : 'draft',
-            signed ? toUtc(date, plus(item.time, 120)) : null,
+            signed ? toUtc(date, plus(time, 120)) : null,
             accession
           )
       );
@@ -319,7 +338,7 @@ export async function createDemoAppointments(db, date, userId) {
           `INSERT INTO appointment_events (appointment_id, user_id, action, detail)
            SELECT id, ?, 'created', 'Turno de ejemplo' FROM appointments WHERE patient_id = ? AND date = ? AND start_time = ?`
         )
-        .bind(userId, patient.id, date, item.time)
+        .bind(userId, patient.id, date, time)
     );
     created++;
   }

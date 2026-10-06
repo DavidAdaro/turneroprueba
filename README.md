@@ -88,7 +88,10 @@ se reparten así:
 | `oxygen` | notas del turno y observaciones del técnico |
 | `prosthesis`, `glaucoma`, `obesity`, `pacemakerMR` | repartidas según el estudio |
 
-Sin ese archivo, la demo usa pacientes inventados.
+Los turnos de tus pacientes **se suman** a los que ya haya: si un horario
+del equipo está ocupado se usa el siguiente libre. Para agregarlos sin
+borrar nada: poné el archivo, corré `npm run setup` (no `reset-db`), `npm
+start` y el botón. Sin ese archivo, la demo usa pacientes inventados.
 
 Los pacientes tienen, en forma arbitraria (~60 %), condiciones clínicas que
 aparecen repartidas y coherentes en todo el circuito según el estudio:
