@@ -68,6 +68,28 @@ El estado depende del día: pasados → informados/entregados (con algún
 ausente o cancelado), hoy → según la hora, futuros → dados/confirmados.
 Se puede apretar más de una vez: no duplica.
 
+### Con tus propios pacientes de prueba (solo local)
+
+Si existe `backend/demo-patients.local.json` (git lo ignora: **nunca se
+sube al repositorio**), `npm run setup` / `npm run reset-db` carga esos
+pacientes y el botón pasa a ser **Cargar turnos de ejemplo (3 semanas
+atrás, pacientes propios)**: genera 2 o 3 turnos por día de las últimas 3
+semanas **solo con esos pacientes**, en todas las especialidades (RM, TC,
+Rx, ecografía y mamografía; ginecología y mamografía solo a mujeres; un
+marcapasos común nunca a RM). El formato está en
+`backend/demo-patients.example.json`. Cada paciente lleva `conditions`, que
+se reparten así:
+
+| Condición (`conditions`) | Siempre en |
+| --- | --- |
+| `pacemaker`, `biosafety` (marcapasos, clips/piercings) | observaciones del técnico |
+| `claustrophobia`, `iodine`, `mobility` | notas del turno (administrativo) |
+| `renal`, `dialysis` | informe médico |
+| `oxygen` | notas del turno y observaciones del técnico |
+| `prosthesis`, `glaucoma`, `obesity`, `pacemakerMR` | repartidas según el estudio |
+
+Sin ese archivo, la demo usa pacientes inventados.
+
 Los pacientes tienen, en forma arbitraria (~60 %), condiciones clínicas que
 aparecen repartidas y coherentes en todo el circuito según el estudio:
 **hemodiálisis**, **marcapasos** (común → nunca RM; o MR condicional con

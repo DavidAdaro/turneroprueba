@@ -1,0 +1,5 @@
+[
+  { "_comentario": "Copiá este archivo como demo-patients.local.json (no se sube a git), poné tus pacientes de prueba y corré npm run reset-db. conditions: renal, dialysis, pacemaker, pacemakerMR, prosthesis, biosafety, iodine, claustrophobia, glaucoma, oxygen, mobility, obesity." },
+  { "dni": "90100001", "first_name": "Ana", "last_name": "Ejemplo", "birth_date": "1980-04-10", "sex": "F", "insurance": "OSDE", "affiliate_number": "61200100", "weight_kg": 64, "conditions": ["claustrophobia", "iodine"], "extra": null },
+  { "dni": "90100002", "first_name": "Bruno", "last_name": "Ficticio", "birth_date": "1950-09-02", "sex": "M", "insurance": "PAMI", "affiliate_number": "150900100201", "weight_kg": 80, "conditions": ["pacemaker", "renal"], "extra": "Usa bastón" }
+]

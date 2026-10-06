@@ -6,7 +6,55 @@
 //   report  → frase del informe médico (cómo afectó al estudio)
 // ctx = { mod: 'MR'|'CT'|'DX', contrast: bool, zone: 'cerebro'|'abdomen'|'torax'|'columna'|'rodilla' }
 
+// always: lugares donde la condición aparece SIEMPRE (en el resto, a veces).
 export const CONDITIONS = {
+  renal: {
+    patient: 'Insuficiencia renal crónica (FG 35 ml/min)',
+    always: ['report'],
+    note: ({ contrast }) => (contrast ? 'IRC: pedir creatinina y filtrado glomerular recientes antes del contraste.' : null),
+    tech: ({ contrast, mod }) =>
+      contrast ? (mod === 'MR' ? 'Gadolinio macrocíclico a media dosis por IRC.' : 'Se realizó sin contraste EV por insuficiencia renal.') : null,
+    report: ({ zone, mod }) =>
+      zone === 'abdomen' && mod === 'US'
+        ? 'Riñones de tamaño reducido con aumento de la ecogenicidad cortical, compatible con nefropatía médica crónica.'
+        : zone === 'abdomen'
+          ? 'Riñones de tamaño disminuido con adelgazamiento cortical, en relación con insuficiencia renal crónica conocida.'
+          : mod === 'CT' || mod === 'MR'
+            ? 'Antecedente de insuficiencia renal crónica: estudio realizado sin contraste endovenoso.'
+            : 'Antecedente de insuficiencia renal crónica (FG 35 ml/min).',
+  },
+  oxygen: {
+    patient: 'Oxigenodependiente (cánula nasal 2 l/min)',
+    always: ['note', 'tech'],
+    note: ({ mod }) =>
+      mod === 'MR' ? 'Requiere oxígeno: usar el tubo AMAGNÉTICO de la sala de RM, no el propio.' : 'Requiere oxígeno: viene con tubo portátil; tener oxígeno central listo en la sala.',
+    tech: ({ mod }) =>
+      mod === 'MR' ? 'O2 2 l/min con tubo amagnético; saturación controlada durante el estudio.' : 'Paciente con O2 por cánula nasal a 2 l/min durante todo el estudio.',
+    report: () => null,
+  },
+  mobility: {
+    patient: 'Movilidad reducida (silla de ruedas)',
+    always: ['note'],
+    note: () => 'Movilidad reducida: asignar camilla o silla y dos personas para la transferencia.',
+    tech: ({ mod }) => (mod === 'DX' ? 'Proyecciones en sedestación por movilidad reducida.' : 'Transferencia a la camilla con dos operadores.'),
+    report: ({ mod }) => (mod === 'DX' ? 'Proyecciones obtenidas en sedestación.' : null),
+  },
+  obesity: {
+    patient: 'Obesidad (110 kg)',
+    note: ({ mod }) => (mod === 'MR' || mod === 'CT' ? 'Peso 110 kg: dentro del límite de la camilla (máx. 200 kg); verificar diámetro del túnel.' : null),
+    tech: ({ mod }) => (mod === 'US' ? 'Ventana acústica limitada por panículo adiposo.' : 'Peso 110 kg dentro del límite de la camilla; se ajustaron los parámetros de adquisición.'),
+    report: ({ mod }) => (mod === 'US' || mod === 'CT' ? 'Evaluación parcialmente limitada por el hábito corporal.' : null),
+  },
+  biosafety: {
+    patient: 'Elementos metálicos: clip de aneurisma cerebral (titanio, RM condicional) y piercings',
+    always: ['tech'],
+    note: ({ mod }) => (mod === 'MR' ? 'Bioseguridad RM: traer el certificado del clip de aneurisma y retirar piercings antes de venir.' : null),
+    tech: ({ mod }) =>
+      mod === 'MR'
+        ? 'Bioseguridad: formulario de seguridad RM firmado; clip de aneurisma de titanio verificado como RM condicional (≤3T); se retiraron piercings.'
+        : 'Se retiraron piercings y elementos metálicos del campo.',
+    report: ({ mod, zone }) => (mod === 'MR' && zone === 'cerebro' ? 'Artefacto de susceptibilidad por clip quirúrgico en territorio de la arteria cerebral media derecha.' : null),
+  },
   dialysis: {
     patient: 'Insuficiencia renal crónica en hemodiálisis (lun-mié-vie). Fístula AV en brazo izquierdo',
     note: ({ mod, contrast }) =>
@@ -29,6 +77,7 @@ export const CONDITIONS = {
   pacemaker: {
     patient: 'Marcapasos definitivo (NO compatible con RM)',
     noMR: true,
+    always: ['tech'],
     note: ({ mod }) => (mod === 'CT' ? 'Portador de marcapasos: por eso se indicó TC y no RM.' : 'Portador de marcapasos: confirmar que el estudio no sea RM.'),
     tech: ({ mod }) =>
       mod === 'DX' ? 'Generador de marcapasos visible en la proyección; se informó al médico.' : 'Se minimizó la exposición directa sobre el generador del marcapasos.',
@@ -69,6 +118,7 @@ export const CONDITIONS = {
   },
   iodine: {
     patient: 'ALERGIA AL IODO (urticaria con contraste en 2019)',
+    always: ['note'],
     note: ({ mod, contrast }) =>
       mod === 'CT' && contrast
         ? 'ALÉRGICO AL IODO: premedicación con corticoide 13, 7 y 1 h antes y antihistamínico 1 h antes. Si no está premedicado, NO inyectar.'
@@ -92,12 +142,13 @@ export const CONDITIONS = {
   },
   claustrophobia: {
     patient: 'Claustrofobia',
+    always: ['note'],
     note: ({ mod }) =>
       mod === 'MR'
         ? 'CLAUSTROFOBIA SEVERA: traer el ansiolítico que le indicó su médico; venir acompañado (no puede manejar después).'
         : mod === 'CT'
           ? 'Claustrofobia: explicarle que el tomógrafo es abierto y corto.'
-          : null,
+          : 'Claustrofobia: avisarle que este estudio es en sala abierta.',
     tech: ({ mod }) =>
       mod === 'MR'
         ? 'Paciente ansioso: ingresó pies primero, con música y acompañante. Se interrumpió una vez; protocolo abreviado.'
@@ -136,7 +187,10 @@ export const patientNotesFor = (conditions, extra) =>
 
 export function zoneOf(studyName) {
   const n = studyName.toLowerCase();
-  if (n.includes('abdomen')) return 'abdomen';
+  if (n.includes('mamo') || n.includes('mama')) return 'mama';
+  if (n.includes('tiroid')) return 'cuello';
+  if (n.includes('ginecol')) return 'pelvis';
+  if (n.includes('abdom')) return 'abdomen'; // abdomen / abdominal
   if (n.includes('tórax') || n.includes('torax')) return 'torax';
   if (n.includes('columna')) return 'columna';
   if (n.includes('rodilla')) return 'rodilla';
@@ -157,8 +211,9 @@ export function conditionTexts(conditions, ctx, pick) {
     const tech = def.tech(ctx);
     const report = def.report(ctx);
     if (note) out.note.push(note);
-    if (tech && pick(i) < 800) out.tech.push(tech);
-    if (report && pick(i + 10) < 750) out.report.push(report);
+    const always = def.always || [];
+    if (tech && (always.includes('tech') || pick(i) < 800)) out.tech.push(tech);
+    if (report && (always.includes('report') || pick(i + 10) < 750)) out.report.push(report);
   });
   return { note: out.note.join(' '), tech: out.tech.join(' '), report: out.report.join(' ') };
 }

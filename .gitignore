@@ -2,3 +2,6 @@ node_modules
 dist
 .wrangler
 .dev.vars
+
+# Pacientes propios para la demo: solo en tu compu, nunca en git
+backend/demo-patients.local.json

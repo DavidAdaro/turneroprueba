@@ -80,11 +80,63 @@ const GENERIC_NOTES = [
   null,
   'Control evolutivo: comparar con estudio anterior.',
 ];
+// Estudios de las otras especialidades (ecografía y mamografía). sex: solo
+// para pacientes de ese sexo.
+const EXTRA_PLAN = [
+  { mod: 'US', study: '180101', time: '08:20', care: 'AMB', ref: 'Dra. Peralta', ind: 'Dolor en hipocondrio derecho', notes: null, tech: null, report: { findings: 'Hígado de tamaño y ecoestructura conservados. Vesícula alitiásica de paredes finas. Vía biliar no dilatada. Bazo y páncreas sin alteraciones.', conclusion: 'Ecografía abdominal dentro de límites normales.' } },
+  { mod: 'US', study: '180201', time: '15:20', care: 'AMB', ref: 'Dra. Castillo', ind: 'Control de nódulo tiroideo', notes: null, tech: null, report: { findings: 'Glándula tiroides de tamaño normal. Nódulo isoecoico de 6 mm en lóbulo derecho, de bordes regulares, sin calcificaciones.', conclusion: 'Nódulo tiroideo de aspecto benigno (TI-RADS 2).' } },
+  { mod: 'US', study: '180301', time: '11:20', care: 'AMB', ref: 'Dra. Paredes', ind: 'Control ginecológico anual', notes: null, tech: null, sex: 'F', report: { findings: 'Útero en anteversión de tamaño normal. Endometrio lineal de 7 mm. Ambos ovarios de tamaño y morfología conservados.', conclusion: 'Ecografía ginecológica normal.' } },
+  { mod: 'MG', study: '430101', time: '09:40', care: 'AMB', ref: 'Dra. Paredes', ind: 'Control mamario anual', notes: null, tech: null, sex: 'F', report: { findings: 'Mamas de densidad tipo B. No se observan nódulos, microcalcificaciones sospechosas ni distorsiones de la arquitectura.', conclusion: 'BI-RADS 1. Control anual.' } },
+];
+
 const GENERIC_TECH = {
   MR: ['Protocolo completo sin incidencias.', 'Paciente colaborador, sin artefactos de movimiento.', 'Se agregó secuencia adicional a pedido del médico.'],
   CT: ['Adquisición sin incidencias.', 'Cortes finos con reconstrucciones multiplanares.', 'Paciente colaborador.'],
   DX: ['Proyecciones de rutina sin repeticiones.', 'Se repitió una proyección por movimiento.', 'Paciente en bipedestación.'],
+  US: ['Estudio con transductor convexo de 3,5 MHz.', 'Buena ventana acústica.', 'Ventana acústica limitada por gas intestinal.'],
+  MG: ['Proyecciones CC y MLO bilaterales.', 'Compresión bien tolerada.', 'Se agregó proyección magnificada.'],
 };
+
+// Pacientes propios para la demo (backend/demo-patients.local.json, cargado
+// por npm run setup en settings.demo_pool). Si existen, la demo usa SOLO
+// esos pacientes y el frontend genera solo días pasados.
+export async function loadDemoPool(db) {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'demo_pool'").first();
+  try {
+    const pool = JSON.parse(row?.value || 'null');
+    return Array.isArray(pool) && pool.length ? pool.map((p) => ({ ...p, conditions: p.conditions || [] })) : null;
+  } catch {
+    return null;
+  }
+}
+
+// 2 o 3 turnos por día con los pacientes propios, cada uno a lo sumo una vez
+// por día, en cualquier especialidad compatible (sexo, marcapasos → no RM).
+function poolItems(pool, offset, weekday) {
+  const all = [...PLAN, ...EXTRA_PLAN];
+  const want = 2 + (mix(offset + 500, 1) % 2);
+  const used = new Set();
+  const items = [];
+  for (let n = 0; n < all.length * 3 && items.length < want; n++) {
+    const index = mix(offset + 700, n) % all.length;
+    const item = all[index];
+    if (weekday === 6 && item.mod !== 'DX') continue;
+    if (items.some((x) => x.item.time === item.time)) continue;
+    const candidates = pool.filter((p) => !used.has(p.dni) && canDo(p.conditions, item.mod) && (!item.sex || item.sex === p.sex));
+    if (!candidates.length) continue;
+    const patient = candidates[mix(offset + 900, n) % candidates.length];
+    used.add(patient.dni);
+    items.push({
+      index,
+      r: mix(offset + 7, index + 300),
+      item,
+      patient,
+      notes: GENERIC_NOTES[mix(offset, index + 50) % GENERIC_NOTES.length],
+      tech: GENERIC_TECH[item.mod][mix(offset, index + 90) % 3],
+    });
+  }
+  return items;
+}
 
 const DONE = ['delivered', 'reported', 'completed'];
 
@@ -130,10 +182,12 @@ export async function createDemoAppointments(db, date, userId) {
   ]);
   const insuranceId = (code) => insurances.find((i) => i.code === code)?.id ?? null;
 
-  // Turnos del día: hoy, la plantilla completa; otros días, ~75 % de los
-  // horarios con pacientes rotados. Sábado solo rayos.
-  const items = [];
-  for (const [index, item] of PLAN.entries()) {
+  // Turnos del día: con pacientes propios, poolItems; si no, hoy la
+  // plantilla completa y otros días ~75 % de los horarios con pacientes
+  // rotados. Sábado solo rayos.
+  const pool = await loadDemoPool(db);
+  const items = pool ? poolItems(pool, offset, weekday) : [];
+  for (const [index, item] of pool ? [] : PLAN.entries()) {
     const r = mix(offset + 1000, index);
     if (weekday === 6 && item.mod !== 'DX') continue;
     if (offset !== 0 && r < 250) continue;
@@ -228,7 +282,7 @@ export async function createDemoAppointments(db, date, userId) {
           accession,
           admitted ? newDicomUid() : null,
           done ? 'received' : 'pending',
-          done ? (item.mod === 'DX' ? 2 : { MR: 240, CT: 380 }[item.mod] + (r % 60)) : null,
+          done ? ({ DX: 2, MG: 4 }[item.mod] ?? { MR: 240, CT: 380, US: 18 }[item.mod] + (r % 60)) : null,
           started ? tech?.id ?? null : null,
           done ? techText : null,
           admitted ? toUtc(date, plus(item.time, -12)) : null,

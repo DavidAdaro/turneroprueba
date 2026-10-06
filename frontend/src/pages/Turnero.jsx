@@ -87,10 +87,12 @@ export default function Turnero() {
   const clinic = (settings?.clinic_name || 'CENTRO').split(' ')[0].toUpperCase().slice(0, 9);
 
   const [progress, setProgress] = useState('');
+  const ownPatients = !!settings?.demo_pool;
   // Turnos ficticios día por día, de 3 semanas atrás a 3 semanas adelante.
   const loadDemo = async () => {
     setError('');
-    const days = Array.from({ length: 43 }, (_, i) => addDays(today(), i - 21));
+    // Con pacientes propios (demo_pool): solo las 3 semanas pasadas.
+    const days = Array.from({ length: ownPatients ? 22 : 43 }, (_, i) => addDays(today(), i - 21));
     let created = 0;
     try {
       for (const [i, d] of days.entries()) {
@@ -142,11 +144,11 @@ export default function Turnero() {
           {can('admin') && (
             <button
               className="flex items-center gap-1 rounded bg-sky-700 px-2 py-1 hover:bg-sky-600 disabled:opacity-60"
-              title="Agrega turnos ficticios de RM, TC y Rx (con notas, observaciones, informes e imágenes) desde 3 semanas atrás hasta 3 semanas adelante"
+              title={ownPatients ? 'Agrega turnos de todas las especialidades de las últimas 3 semanas solo con los pacientes de backend/demo-patients.local.json' : 'Agrega turnos ficticios de RM, TC y Rx (con notas, observaciones, informes e imágenes) desde 3 semanas atrás hasta 3 semanas adelante'}
               disabled={!!progress}
               onClick={loadDemo}
             >
-              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : 'Cargar turnos de ejemplo (±3 semanas)'}
+              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : ownPatients ? 'Cargar turnos de ejemplo (3 semanas atrás, pacientes propios)' : 'Cargar turnos de ejemplo (±3 semanas)'}
             </button>
           )}
         </div>

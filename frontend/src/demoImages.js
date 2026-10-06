@@ -38,6 +38,8 @@ export function seriesFor(modality, studyName = '') {
     if (n.includes('gadolinio')) list.push(s('T1 AX + GADOLINIO', 'T1', 22, true));
     return list;
   }
+  if (modality === 'US') return [s('MODO B', 'US', 12), s('DOPPLER COLOR', 'US', 6)];
+  if (modality === 'MG') return [s('CC DERECHA', 'MG', 1, false, 'cc-r'), s('CC IZQUIERDA', 'MG', 1, false, 'cc-l'), s('MLO DERECHA', 'MG', 1, false, 'mlo-r'), s('MLO IZQUIERDA', 'MG', 1, false, 'mlo-l')];
   if (modality === 'CT') {
     if (n.includes('tórax') || n.includes('torax')) return [s('AXIAL MEDIASTINO', 'CT', 40), s('AXIAL PULMÓN', 'CTLUNG', 40)];
     if (n.includes('abdomen')) return [s('AXIAL', 'CT', 40, n.includes('contraste')), s('AXIAL HUESO', 'CTBONE', 40)];
@@ -299,6 +301,91 @@ function abdomen(ctx, S, f, P, R, series) {
   }
 }
 
+// Ecografía: abanico con textura de speckle y estructuras hipoecoicas.
+function ultrasound(ctx, S, f, R, series, studyName) {
+  const cx = S / 2;
+  const top = S * 0.08;
+  const r = S * 0.85;
+  const fan = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx - 22, top);
+    ctx.arc(cx, top - 40, r, Math.PI / 2 + 0.62, Math.PI / 2 - 0.62, true);
+    ctx.lineTo(cx + 22, top);
+    ctx.closePath();
+  };
+  fan();
+  ctx.fillStyle = gray(70);
+  ctx.fill();
+  ctx.save();
+  fan();
+  ctx.clip();
+  // Speckle
+  for (let i = 0; i < 2600; i++) ellipse(ctx, R() * S, top + R() * r, 1 + R() * 2.5, 0.6 + R() * 1.2, 40 + R() * 110);
+  const n = (studyName || '').toLowerCase();
+  if (n.includes('tiroid')) {
+    ellipse(ctx, cx - 70, S * 0.38, 70, 40, 105);
+    ellipse(ctx, cx + 70, S * 0.38, 70, 40, 105);
+    ellipse(ctx, cx - 60 + f * 30, S * 0.38, 14, 11, 95); // nódulo
+    ellipse(ctx, cx, S * 0.62, 30, 30, 10); // tráquea (sombra)
+  } else if (n.includes('ginecol')) {
+    ellipse(ctx, cx, S * 0.45, 95, 60, 95);
+    ellipse(ctx, cx, S * 0.45, 70, 6, 170); // endometrio
+    ellipse(ctx, cx - 150, S * 0.55, 32, 24, 80);
+    ellipse(ctx, cx + 150, S * 0.55, 32, 24, 80);
+  } else {
+    ellipse(ctx, cx - 40, S * 0.42, 180, 120, 100); // hígado
+    ellipse(ctx, cx + 30 + f * 20, S * 0.5, 34, 22, 8); // vesícula (anecoica)
+    ctx.strokeStyle = gray(220);
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(cx - 40, S * 0.75, 200, 60, 0, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke(); // diafragma
+  }
+  if (series.name.includes('DOPPLER')) {
+    ctx.fillStyle = 'rgba(220,40,40,0.75)';
+    ctx.fillRect(cx - 20, S * 0.55, 40, 10);
+    ctx.fillStyle = 'rgba(40,90,230,0.75)';
+    ctx.fillRect(cx - 20, S * 0.58, 40, 10);
+  }
+  ctx.restore();
+  // Escala de profundidad
+  ctx.fillStyle = gray(200);
+  for (let i = 0; i < 9; i++) ctx.fillRect(S - 16, top + (i * r) / 9, 8, 2);
+}
+
+// Mamografía: mama en proyección CC o MLO, densidad tipo B.
+function mammo(ctx, S, f, R, series) {
+  const right = series.view.endsWith('-r');
+  const mlo = series.view.startsWith('mlo');
+  const wall = right ? 0 : S; // pared torácica al costado
+  const dir = right ? 1 : -1;
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(wall, S / 2, S * 0.62, S * 0.44, 0, right ? -Math.PI / 2 : Math.PI / 2, right ? Math.PI / 2 : (3 * Math.PI) / 2);
+  ctx.closePath();
+  ctx.fillStyle = gray(110);
+  ctx.fill();
+  ctx.clip();
+  for (let i = 0; i < 70; i++) {
+    const x = wall + dir * (S * 0.05 + R() * S * 0.45);
+    const y = S * 0.25 + R() * S * 0.5;
+    ellipse(ctx, x, y, 10 + R() * 30, 6 + R() * 18, 140 + R() * 70, R() * Math.PI);
+  }
+  if (mlo) {
+    ctx.fillStyle = gray(200); // músculo pectoral
+    ctx.beginPath();
+    ctx.moveTo(wall, 0);
+    ctx.lineTo(wall + dir * S * 0.32, 0);
+    ctx.lineTo(wall, S * 0.6);
+    ctx.fill();
+  }
+  ctx.restore();
+  ellipse(ctx, wall + dir * S * 0.61, S / 2, 9, 12, 190); // pezón
+  ctx.fillStyle = gray(230);
+  ctx.font = 'bold 22px monospace';
+  ctx.fillText(`${right ? 'R' : 'L'} ${mlo ? 'MLO' : 'CC'}`, right ? S - 110 : 20, S - 30);
+}
+
 const DRAW = { brain, spine, knee, chest: chestCT, abdomen };
 
 // Dibuja la imagen `index` (0..slices-1) de la serie en el canvas.
@@ -314,14 +401,16 @@ export function drawDemoImage(canvas, { modality, studyName, seed, series, index
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, S, S);
   ctx.filter = series.technique === 'DX' ? 'blur(2px)' : 'blur(1px)';
-  if (modality === 'DX' && anatomy === 'chest') chestDX(ctx, S, f, P, R, series);
+  if (modality === 'US') ultrasound(ctx, S, f, R, series, studyName);
+  else if (modality === 'MG') mammo(ctx, S, f, R, series);
+  else if (modality === 'DX' && anatomy === 'chest') chestDX(ctx, S, f, P, R, series);
   else (DRAW[anatomy] || brain)(ctx, S, f, P, R, series);
   ctx.restore();
 
   // Ruido para que parezca una adquisición real.
   const img = ctx.getImageData(0, 0, S, S);
   const d = img.data;
-  const amp = modality === 'MR' ? 14 : modality === 'CT' ? 9 : 6;
+  const amp = modality === 'MR' ? 14 : modality === 'CT' ? 9 : modality === 'US' ? 30 : 6;
   for (let i = 0; i < d.length; i += 4) {
     const v = Math.max(0, Math.min(255, d[i] + (R() - 0.5) * amp));
     d[i] = d[i + 1] = d[i + 2] = v;
