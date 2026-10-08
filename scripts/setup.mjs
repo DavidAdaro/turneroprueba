@@ -5,6 +5,8 @@
 // Con --reset borra la base local y la vuelve a crear desde cero.
 // Con --solo-propios borra todos los pacientes que no estén en
 // backend/demo-patients.local.json (y sus turnos, informes e historial).
+// Con --borrar-turnos borra todos los turnos (estudios hechos), informes e
+// historial; quedan pacientes, equipos y catálogo de estudios.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -16,6 +18,7 @@ const backend = join(root, 'backend');
 const frontend = join(root, 'frontend');
 const reset = process.argv.includes('--reset');
 const onlyOwn = process.argv.includes('--solo-propios');
+const clearAppointments = process.argv.includes('--borrar-turnos');
 
 function run(cmd, args, cwd) {
   console.log(`\n> ${cmd} ${args.join(' ')}   (${cwd.replace(root, '.') || '.'})`);
@@ -53,7 +56,7 @@ if (reset || !existsSync(dbDir)) {
 } else {
   // Migraciones idempotentes, en orden: solo agregan/actualizan lo que falte.
   for (const f of readdirSync(join(backend, 'migrations')).filter((x) => x.endsWith('.sql')).sort()) d1(`./migrations/${f}`);
-  console.log('\n✔ Base local existente actualizada (no se borró nada)');
+  console.log('\n✔ Base local existente actualizada (migraciones aplicadas)');
 }
 
 // 4. Pacientes propios para la demo (opcional, solo local).
@@ -128,6 +131,14 @@ if (existsSync(poolFile)) {
   // Sin archivo propio, la demo usa pacientes inventados.
   writeFileSync(join(backend, '.wrangler', 'demo-pool.sql'), "DELETE FROM settings WHERE key = 'demo_pool';");
   d1('./.wrangler/demo-pool.sql');
+}
+
+// 5. Borrar todos los turnos (a pedido).
+if (clearAppointments) {
+  const file = join(backend, '.wrangler', 'clear-appointments.sql');
+  writeFileSync(file, ['DELETE FROM reports;', 'DELETE FROM appointment_events;', 'DELETE FROM appointments;'].join('\n'));
+  d1('./.wrangler/clear-appointments.sql');
+  console.log('\n✔ Se borraron todos los turnos, informes e historial (quedan pacientes, equipos y catálogo de estudios)');
 }
 
 console.log(`
