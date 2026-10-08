@@ -70,11 +70,12 @@ Se puede apretar más de una vez: no duplica.
 
 ### Con tus propios pacientes de prueba (solo local)
 
-Si existe `backend/demo-patients.local.json` (git lo ignora: **nunca se
-sube al repositorio**), `npm run setup` / `npm run reset-db` carga esos
-pacientes y el botón pasa a ser **Cargar turnos de ejemplo (3 semanas
-atrás, pacientes propios)**: genera 2 o 3 turnos por día de las últimas 3
-semanas **solo con esos pacientes**, en todas las especialidades (RM, TC,
+Los turnos de ejemplo se generan **solo con tus pacientes** de
+`backend/demo-patients.local.json` (git lo ignora: **nunca se sube al
+repositorio**). `npm run setup` / `npm run reset-db` carga esos pacientes y
+el botón **Cargar turnos de ejemplo (N pacientes, ±3 semanas)** genera 2 o
+3 turnos por día desde 3 semanas atrás hasta 3 semanas adelante **solo con
+ellos** (sin el archivo, avisa en vez de inventar pacientes), en todas las especialidades (RM, TC,
 Rx, ecografía y mamografía; ginecología y mamografía solo a mujeres; un
 marcapasos común nunca a RM). El formato está en
 `backend/demo-patients.example.json`. Cada paciente lleva `conditions`, que

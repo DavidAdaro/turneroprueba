@@ -87,17 +87,22 @@ export default function Turnero() {
   const clinic = (settings?.clinic_name || 'CENTRO').split(' ')[0].toUpperCase().slice(0, 9);
 
   const [progress, setProgress] = useState('');
-  const ownPatients = !!settings?.demo_pool;
+  const ownPatients = (() => {
+    try {
+      return JSON.parse(settings?.demo_pool || '[]').length;
+    } catch {
+      return 0;
+    }
+  })();
   // Turnos ficticios día por día, de 3 semanas atrás a 3 semanas adelante.
   const loadDemo = async () => {
     setError('');
-    // Con pacientes propios (demo_pool): solo las 3 semanas pasadas.
-    const days = Array.from({ length: ownPatients ? 22 : 43 }, (_, i) => addDays(today(), i - 21));
+    const days = Array.from({ length: 43 }, (_, i) => addDays(today(), i - 21)); // 3 semanas atrás y 3 adelante
     let created = 0;
     try {
       for (const [i, d] of days.entries()) {
         setProgress(`${i + 1}/${days.length}`);
-        created += (await api.createDemoAppointments(d)).created;
+        created += (await api.createDemoAppointments(d)).created; // si falta el archivo, corta acá con el aviso
       }
       if (!created) setError('Los turnos de ejemplo ya estaban cargados');
     } catch (e) {
@@ -144,11 +149,11 @@ export default function Turnero() {
           {can('admin') && (
             <button
               className="flex items-center gap-1 rounded bg-sky-700 px-2 py-1 hover:bg-sky-600 disabled:opacity-60"
-              title={ownPatients ? 'Agrega turnos de todas las especialidades de las últimas 3 semanas solo con los pacientes de backend/demo-patients.local.json' : 'Agrega turnos ficticios de RM, TC y Rx (con notas, observaciones, informes e imágenes) desde 3 semanas atrás hasta 3 semanas adelante'}
+              title={ownPatients ? 'Agrega turnos de todas las especialidades, de 3 semanas atrás a 3 semanas adelante, solo con los pacientes de backend/demo-patients.local.json' : 'Falta backend/demo-patients.local.json: crealo y corré npm run setup'}
               disabled={!!progress}
               onClick={loadDemo}
             >
-              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : ownPatients ? 'Cargar turnos de ejemplo (3 semanas atrás, pacientes propios)' : 'Cargar turnos de ejemplo (±3 semanas)'}
+              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : ownPatients ? `Cargar turnos de ejemplo (${ownPatients} pacientes, ±3 semanas)` : 'Cargar turnos de ejemplo (faltan mis pacientes)'}
             </button>
           )}
         </div>
