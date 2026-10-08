@@ -5,6 +5,7 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "reset-db": "node scripts/setup.mjs --reset",
+    "solo-mis-pacientes": "node scripts/setup.mjs --solo-propios",
     "start": "node scripts/start.mjs",
     "stop": "node scripts/stop.mjs"
   },

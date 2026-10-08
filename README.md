@@ -154,6 +154,7 @@ Abrí **http://localhost:5180**. `Ctrl+C` corta los dos.
 | `npm start` | Levanta backend (http://localhost:8788) y frontend (http://localhost:5180). |
 | `npm run setup` | Instala lo que falte y actualiza la base local **sin borrar datos** (correrlo después de un `git pull`). |
 | `npm run stop` | Apaga lo que haya quedado prendido en los puertos 8788 y 5180 (por ejemplo, una ventana vieja de `npm run dev`). |
+| `npm run solo-mis-pacientes` | Borra todos los pacientes que no estén en `backend/demo-patients.local.json`, con sus turnos, informes e historial. Los tuyos quedan intactos. |
 | `npm run reset-db` | Borra la base local y la crea de nuevo desde cero con los datos de prueba. |
 
 La base es un SQLite local (D1 simulado por wrangler) en

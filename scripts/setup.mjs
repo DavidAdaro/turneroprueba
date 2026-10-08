@@ -3,6 +3,8 @@
 //   2. crea backend/.dev.vars con un secreto propio
 //   3. crea la base local (D1 en backend/.wrangler) con datos de prueba
 // Con --reset borra la base local y la vuelve a crear desde cero.
+// Con --solo-propios borra todos los pacientes que no estén en
+// backend/demo-patients.local.json (y sus turnos, informes e historial).
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -13,6 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const backend = join(root, 'backend');
 const frontend = join(root, 'frontend');
 const reset = process.argv.includes('--reset');
+const onlyOwn = process.argv.includes('--solo-propios');
 
 function run(cmd, args, cwd) {
   console.log(`\n> ${cmd} ${args.join(' ')}   (${cwd.replace(root, '.') || '.'})`);
@@ -97,7 +100,31 @@ if (existsSync(poolFile)) {
   writeFileSync(tmp, sql);
   d1('./.wrangler/demo-pool.sql');
   console.log(`\n✔ Pacientes propios para la demo: ${pool.map((p) => `${p.last_name}, ${p.first_name}`).join(' · ')}`);
+
+  // Dejar solo los pacientes propios: a pedido (--solo-propios) o al
+  // recrear la base (--reset), para que no queden los de ejemplo del seed.
+  if (onlyOwn || reset) {
+    const dnis = pool.map((p) => q(String(p.dni).replace(/\D/g, ''))).join(', ');
+    const others = `SELECT id FROM patients WHERE dni NOT IN (${dnis})`;
+    const theirAppointments = `SELECT id FROM appointments WHERE patient_id IN (${others})`;
+    const prune = join(backend, '.wrangler', 'prune.sql');
+    writeFileSync(
+      prune,
+      [
+        `DELETE FROM reports WHERE appointment_id IN (${theirAppointments});`,
+        `DELETE FROM appointment_events WHERE appointment_id IN (${theirAppointments});`,
+        `DELETE FROM appointments WHERE patient_id IN (${others});`,
+        `DELETE FROM patients WHERE dni NOT IN (${dnis});`,
+      ].join('\n')
+    );
+    d1('./.wrangler/prune.sql');
+    console.log(`\n✔ Quedaron solo ${pool.length} pacientes (los de demo-patients.local.json); el resto se borró con sus turnos`);
+  }
 } else {
+  if (onlyOwn) {
+    console.error('\n✘ No encontré backend/demo-patients.local.json: sin ese archivo no sé qué pacientes dejar. No se borró nada.');
+    process.exit(1);
+  }
   // Sin archivo propio, la demo usa pacientes inventados.
   writeFileSync(join(backend, '.wrangler', 'demo-pool.sql'), "DELETE FROM settings WHERE key = 'demo_pool';");
   d1('./.wrangler/demo-pool.sql');
