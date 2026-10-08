@@ -235,7 +235,9 @@ export async function createDemoAppointments(db, date, userId) {
   let skipped = 0;
   for (const { index, r, item, patient: p, notes, tech: techNotes } of items) {
     const patient = patients.find((x) => x.dni === p.dni);
-    const eq = equipment.find((e) => e.modality === item.mod);
+    // Reparte entre los equipos de esa modalidad (equipo 1, 2, …).
+    const sameMod = equipment.filter((e) => e.modality === item.mod);
+    const eq = sameMod.length ? sameMod[mix(offset + 41, index + 3) % sameMod.length] : null;
     const study = studies.find((x) => x.code === item.study) || studies.find((x) => x.modality === item.mod);
     // Datos mínimos para poder dar el turno.
     if (!patient || !eq || !study) {
