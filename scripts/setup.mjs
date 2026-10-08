@@ -4,7 +4,7 @@
 //   3. crea la base local (D1 en backend/.wrangler) con datos de prueba
 // Con --reset borra la base local y la vuelve a crear desde cero.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,8 @@ if (reset || !existsSync(dbDir)) {
   d1('./seed.sql');
   console.log('\n✔ Base local creada con datos de prueba');
 } else {
-  d1('./migrations/0001_api_keys.sql'); // idempotente: solo agrega lo que falte
+  // Migraciones idempotentes, en orden: solo agregan/actualizan lo que falte.
+  for (const f of readdirSync(join(backend, 'migrations')).filter((x) => x.endsWith('.sql')).sort()) d1(`./migrations/${f}`);
   console.log('\n✔ Base local existente actualizada (no se borró nada)');
 }
 

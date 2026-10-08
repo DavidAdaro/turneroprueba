@@ -18,10 +18,10 @@ INSERT INTO users (name, email, password_hash, role, license_number) VALUES
   ('Dra. Gómez', 'informante@turnero.test', '$2a$10$4LsiadQQuLPCNH5OAVVNvO1JHfVvzYoHRqZmrQ/.DWiajTC7.3yiW', 'radiologist', 'MP 12345');
 
 INSERT INTO equipment (id, name, modality, ae_title, location, color) VALUES
-  (1, 'Resonador 1.5T', 'MR', 'RM15T', 'Sala 1', '#7c3aed'),
-  (2, 'Tomógrafo 64 cortes', 'CT', 'TC64', 'Sala 2', '#0891b2'),
+  (1, 'Resonador 1', 'MR', 'RM15T', 'Sala 1', '#7c3aed'),
+  (2, 'Tomógrafo 1', 'CT', 'TC64', 'Sala 2', '#0891b2'),
   (3, 'Ecógrafo 1', 'US', 'ECO1', 'Consultorio 3', '#16a34a'),
-  (4, 'Sala de Rayos', 'DX', 'RX1', 'Sala 4', '#ea580c'),
+  (4, 'Sala de Rayos 1', 'DX', 'RX1', 'Sala 4', '#ea580c'),
   (5, 'Mamógrafo', 'MG', 'MAMO1', 'Sala 5', '#db2777');
 
 -- Lunes a viernes. Rayos y eco además sábado a la mañana.
@@ -73,7 +73,9 @@ INSERT INTO studies (id, code, name, modality, duration_minutes, contrast, prepa
   (11, '420101', 'Rx de tórax (frente y perfil)', 'DX', 10, 0, NULL, 15000),
   (12, '420201', 'Rx de columna lumbosacra', 'DX', 10, 0, NULL, 18000),
   (13, '420301', 'Rx de rodilla', 'DX', 10, 0, NULL, 14000),
-  (14, '430101', 'Mamografía bilateral', 'MG', 20, 0, 'No usar desodorante, talco ni cremas el día del estudio.', 40000);
+  (14, '430101', 'Mamografía bilateral', 'MG', 20, 0, 'No usar desodorante, talco ni cremas el día del estudio.', 40000),
+  (15, '341004', 'TC de cerebro con contraste', 'CT', 20, 1, 'Ayuno de 4 horas. Traer creatinina reciente. Informar alergia al yodo/contraste previa.', 120000),
+  (16, '341005', 'TC de tórax con contraste', 'CT', 20, 1, 'Ayuno de 4 horas. Traer creatinina reciente. Informar alergia al yodo/contraste previa.', 125000);
 
 INSERT INTO study_prices (study_id, insurance_id, price, copay)
   SELECT s.id, i.id, ROUND(s.private_price * CASE i.id WHEN 2 THEN 0.8 WHEN 3 THEN 0.45 WHEN 4 THEN 0.75 ELSE 0.6 END, 0),

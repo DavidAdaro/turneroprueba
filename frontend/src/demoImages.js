@@ -41,9 +41,9 @@ export function seriesFor(modality, studyName = '') {
   if (modality === 'US') return [s('MODO B', 'US', 12), s('DOPPLER COLOR', 'US', 6)];
   if (modality === 'MG') return [s('CC DERECHA', 'MG', 1, false, 'cc-r'), s('CC IZQUIERDA', 'MG', 1, false, 'cc-l'), s('MLO DERECHA', 'MG', 1, false, 'mlo-r'), s('MLO IZQUIERDA', 'MG', 1, false, 'mlo-l')];
   if (modality === 'CT') {
-    if (n.includes('tórax') || n.includes('torax')) return [s('AXIAL MEDIASTINO', 'CT', 40), s('AXIAL PULMÓN', 'CTLUNG', 40)];
+    if (n.includes('tórax') || n.includes('torax')) return [s('AXIAL MEDIASTINO', 'CT', 40, n.includes('con contraste')), s('AXIAL PULMÓN', 'CTLUNG', 40)];
     if (n.includes('abdomen')) return [s('AXIAL', 'CT', 40, n.includes('contraste')), s('AXIAL HUESO', 'CTBONE', 40)];
-    return [s('AXIAL CEREBRO', 'CT', 30), s('AXIAL HUESO', 'CTBONE', 30)];
+    return [s('AXIAL CEREBRO', 'CT', 30, n.includes('con contraste')), s('AXIAL HUESO', 'CTBONE', 30)];
   }
   if (n.includes('columna')) return [s('FRENTE (AP)', 'DX', 1), s('PERFIL', 'DX', 1, false, 'lat')];
   if (n.includes('rodilla')) return [s('FRENTE', 'DX', 1), s('PERFIL', 'DX', 1, false, 'lat')];
