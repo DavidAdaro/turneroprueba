@@ -147,20 +147,38 @@ function clinicalOf(a, reports) {
 }
 
 // Turnero del día para sistemas externos (p. ej. InPatient): un turno por
-// elemento con paciente, estudio, cobertura, horarios y estado. Filtros
-// opcionales: date (AAAA-MM-DD, por defecto hoy), modality, ae_title. Si la
-// key además tiene clinical:read, cada turno trae "clinical".
+// elemento con paciente, estudio, cobertura, horarios y estado.
+// Query (todos opcionales):
+//   date      AAAA-MM-DD (por defecto hoy, hora Argentina). Inválida → 400.
+//   equipment nombre del equipo, sin distinguir mayúsculas ("Resonador 1").
+//   ae_title  AE Title DICOM del equipo ("RM15T").
+//   modality  MR | CT | US | DX | MG ...
+// equipment/ae_title que no existen → 404. Si la key además tiene
+// clinical:read, cada turno trae "clinical".
 integration.get('/schedule', requireScope('schedule:read'), async (c) => {
-  const date = isDate(c.req.query('date')) ? c.req.query('date') : nowLocal().date;
+  const db = c.env.DB;
+  const qDate = c.req.query('date');
+  if (qDate !== undefined && !isDate(qDate)) return c.json({ error: 'date inválida: usar AAAA-MM-DD' }, 400);
+  const date = qDate || nowLocal().date;
   const params = [date];
   let where = 'a.date = ?';
   if (c.req.query('modality')) {
     where += ' AND e.modality = ?';
-    params.push(c.req.query('modality'));
+    params.push(c.req.query('modality').toUpperCase());
   }
-  if (c.req.query('ae_title')) {
+  const byName = (c.req.query('equipment') || '').trim();
+  if (byName) {
+    const eq = await db.prepare('SELECT id FROM equipment WHERE lower(name) = lower(?)').bind(byName).first();
+    if (!eq) return c.json({ error: `No existe el equipo "${byName}"` }, 404);
+    where += ' AND a.equipment_id = ?';
+    params.push(eq.id);
+  }
+  const aeTitle = (c.req.query('ae_title') || '').trim();
+  if (aeTitle) {
+    const eq = await db.prepare('SELECT id FROM equipment WHERE ae_title = ?').bind(aeTitle).first();
+    if (!eq) return c.json({ error: `No existe un equipo con AE Title "${aeTitle}"` }, 404);
     where += ' AND e.ae_title = ?';
-    params.push(c.req.query('ae_title'));
+    params.push(aeTitle);
   }
   const { results } = await c.env.DB.prepare(`${APPOINTMENT_SELECT} WHERE ${where} ORDER BY a.start_time, e.name`).bind(...params).all();
   const clinical = c.get('apiScopes').includes('clinical:read');
