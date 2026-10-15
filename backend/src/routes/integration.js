@@ -3,6 +3,7 @@ import { readJson, toInt } from '../utils/http';
 import { APPOINTMENT_SELECT, logEvent } from '../utils/agenda';
 import { isDate, nowLocal } from '../utils/time';
 import { SCOPES, hashApiKey, parseScopes } from '../utils/apiKeys';
+import { MODALITIES } from './equipment';
 
 // Endpoints para sistemas externos (InPatient, PACS, broker de worklist),
 // servidor a servidor. Autenticación por header X-API-Key con una key
@@ -145,6 +146,42 @@ function clinicalOf(a, reports) {
         : null,
   };
 }
+
+// Lista de equipos (consolas). "name" es el valor que acepta
+// /schedule?equipment=. Query (opcionales):
+//   modality         MR | CT | US | DX | MG ...
+//   include_inactive 1 para incluir equipos desactivados (por defecto no).
+integration.get('/equipment', requireScope('schedule:read'), async (c) => {
+  const db = c.env.DB;
+  const where = [];
+  const params = [];
+  if (c.req.query('include_inactive') !== '1') where.push('active = 1');
+  if (c.req.query('modality')) {
+    where.push('modality = ?');
+    params.push(c.req.query('modality').toUpperCase());
+  }
+  const [{ results: rows }, { results: schedules }] = await Promise.all([
+    db
+      .prepare(`SELECT * FROM equipment${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY modality, name`)
+      .bind(...params)
+      .all(),
+    db.prepare('SELECT * FROM schedules ORDER BY weekday, start_time').all(),
+  ]);
+  return c.json({
+    equipment: rows.map((e) => ({
+      id: e.id,
+      name: e.name,
+      modality: e.modality,
+      modality_name: MODALITIES[e.modality] || e.modality,
+      ae_title: e.ae_title,
+      location: e.location,
+      active: !!e.active,
+      schedules: schedules
+        .filter((s) => s.equipment_id === e.id)
+        .map((s) => ({ weekday: s.weekday, start_time: s.start_time, end_time: s.end_time, slot_minutes: s.slot_minutes })),
+    })),
+  });
+});
 
 // Turnero del día para sistemas externos (p. ej. InPatient): un turno por
 // elemento con paciente, estudio, cobertura, horarios y estado.
