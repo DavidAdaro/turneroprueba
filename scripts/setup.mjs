@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CONDITIONS } from '../backend/src/utils/demoConditions.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const backend = join(root, 'backend');
@@ -59,32 +60,22 @@ if (reset || !existsSync(dbDir)) {
   console.log('\n✔ Base local existente actualizada (migraciones aplicadas)');
 }
 
-// 4. Pacientes propios para la demo (opcional, solo local).
-const poolFile = join(backend, 'demo-patients.local.json');
-if (existsSync(poolFile)) {
-  let pool;
-  try {
-    pool = JSON.parse(readFileSync(poolFile, 'utf8')).filter((p) => p && p.dni);
-  } catch (err) {
-    console.error(`\n✘ backend/demo-patients.local.json no es un JSON válido: ${err.message}`);
-    process.exit(1);
+// 4. Pacientes para la demo: los propios (demo-patients.local.json, solo en
+// tu compu) más los ficticios del repo (demo-patients.ficticios.json).
+const poolFiles = ['demo-patients.local.json', 'demo-patients.ficticios.json'].map((f) => join(backend, f)).filter(existsSync);
+if (poolFiles.length) {
+  let pool = [];
+  for (const f of poolFiles) {
+    try {
+      pool.push(...JSON.parse(readFileSync(f, 'utf8')).filter((p) => p && p.dni));
+    } catch (err) {
+      console.error(`\n✘ ${f.replace(root, '.')} no es un JSON válido: ${err.message}`);
+      process.exit(1);
+    }
   }
+  pool = [...new Map(pool.map((p) => [String(p.dni).replace(/\D/g, ''), p])).values()];
   const q = (v) => (v === null || v === undefined || v === '' ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`);
-  const CONDITION_TEXT = {
-    renal: 'Insuficiencia renal crónica (FG 35 ml/min)',
-    dialysis: 'Insuficiencia renal crónica en hemodiálisis (lun-mié-vie). Fístula AV en brazo izquierdo',
-    pacemaker: 'Marcapasos definitivo (NO compatible con RM)',
-    pacemakerMR: 'Marcapasos MR condicional (requiere protocolo con cardiología)',
-    prosthesis: 'Prótesis metálica (reemplazo total de cadera derecha, titanio)',
-    biosafety: 'Elementos metálicos: clip de aneurisma cerebral (titanio, RM condicional) y piercings',
-    iodine: 'ALERGIA AL IODO (urticaria con contraste en 2019)',
-    claustrophobia: 'Claustrofobia',
-    glaucoma: 'Glaucoma de ángulo cerrado',
-    oxygen: 'Oxigenodependiente (cánula nasal 2 l/min)',
-    mobility: 'Movilidad reducida (silla de ruedas)',
-    obesity: 'Obesidad (110 kg)',
-  };
-  const notes = (p) => [p.extra, ...(p.conditions || []).map((c) => CONDITION_TEXT[c])].filter(Boolean).join('. ');
+  const notes = (p) => [p.extra, ...(p.conditions || []).map((c) => CONDITIONS[c]?.patient)].filter(Boolean).join('. ');
   const sql = [
     ...pool.map(
       (p) =>
@@ -102,7 +93,7 @@ if (existsSync(poolFile)) {
   mkdirSync(dirname(tmp), { recursive: true });
   writeFileSync(tmp, sql);
   d1('./.wrangler/demo-pool.sql');
-  console.log(`\n✔ Pacientes propios para la demo: ${pool.map((p) => `${p.last_name}, ${p.first_name}`).join(' · ')}`);
+  console.log(`\n✔ Pacientes para la demo (${pool.length}): ${pool.map((p) => `${p.last_name}, ${p.first_name}`).join(" · ")}`);
 
   // Dejar solo los pacientes propios: a pedido (--solo-propios) o al
   // recrear la base (--reset), para que no queden los de ejemplo del seed.
@@ -121,11 +112,11 @@ if (existsSync(poolFile)) {
       ].join('\n')
     );
     d1('./.wrangler/prune.sql');
-    console.log(`\n✔ Quedaron solo ${pool.length} pacientes (los de demo-patients.local.json); el resto se borró con sus turnos`);
+    console.log(`\n✔ Quedaron solo los ${pool.length} pacientes de la demo (propios + ficticios); el resto se borró con sus turnos`);
   }
 } else {
   if (onlyOwn) {
-    console.error('\n✘ No encontré backend/demo-patients.local.json: sin ese archivo no sé qué pacientes dejar. No se borró nada.');
+    console.error('\n✘ No encontré backend/demo-patients.local.json ni demo-patients.ficticios.json: no sé qué pacientes dejar. No se borró nada.');
     process.exit(1);
   }
   // Sin archivo propio, la demo usa pacientes inventados.
@@ -147,5 +138,5 @@ Listo. Para usarlo:
   npm start
 
 y abrí http://localhost:5180  (usuario admin@turnero.test / turnero123).
-En "Turnero del día", el botón "Cargar turnos de ejemplo (±3 semanas)" llena la agenda.
+En "Turnero del día", el botón "Cargar turnos de ejemplo" llena la agenda de todos los equipos.
 `);

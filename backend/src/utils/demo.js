@@ -110,29 +110,34 @@ export async function loadDemoPool(db) {
   }
 }
 
-// 2 o 3 turnos por día con los pacientes propios, cada uno a lo sumo una vez
-// por día, en cualquier especialidad compatible (sexo, marcapasos → no RM).
+// Turnos del día con los pacientes de la demo: rota por todas las
+// modalidades (RM, TC, Eco, Rx, Mamo) para que todos los equipos tengan
+// turnos; cada paciente a lo sumo una vez por día y solo en estudios
+// compatibles (sexo, marcapasos/implante coclear → no RM). Sábado solo Rx.
+const MODALITY_ROUND = ['MR', 'CT', 'US', 'DX', 'MG', 'MR', 'CT', 'US', 'DX', 'MG']; // 2 por modalidad → equipos 1 y 2
+
 function poolItems(pool, offset, weekday) {
   const all = [...PLAN, ...EXTRA_PLAN];
-  const want = 2 + (mix(offset + 500, 1) % 2);
+  const saturday = weekday === 6;
+  const want = Math.min(pool.length, saturday ? 3 : 11 + (mix(offset + 500, 1) % 3));
   const used = new Set();
   const items = [];
-  for (let n = 0; n < all.length * 3 && items.length < want; n++) {
-    const index = mix(offset + 700, n) % all.length;
-    const item = all[index];
-    if (weekday === 6 && item.mod !== 'DX') continue;
-    if (items.some((x) => x.item.time === item.time)) continue;
+  for (let n = 0; n < 200 && items.length < want; n++) {
+    const mod = saturday ? 'DX' : MODALITY_ROUND[(n + offset * 2 + 900) % MODALITY_ROUND.length];
+    const options = all.filter((x) => x.mod === mod);
+    const item = options[mix(offset + 700, n) % options.length];
+    const index = all.indexOf(item);
     const candidates = pool.filter((p) => !used.has(p.dni) && canDo(p.conditions, item.mod) && (!item.sex || item.sex === p.sex));
     if (!candidates.length) continue;
     const patient = candidates[mix(offset + 900, n) % candidates.length];
     used.add(patient.dni);
     items.push({
       index,
-      r: mix(offset + 7, index + 300),
+      r: mix(offset + 7, index + 300 + n),
       item,
       patient,
-      notes: GENERIC_NOTES[mix(offset, index + 50) % GENERIC_NOTES.length],
-      tech: GENERIC_TECH[item.mod][mix(offset, index + 90) % 3],
+      notes: GENERIC_NOTES[mix(offset, index + 50 + n) % GENERIC_NOTES.length],
+      tech: GENERIC_TECH[item.mod][mix(offset, index + 90 + n) % 3],
     });
   }
   return items;
@@ -237,7 +242,13 @@ export async function createDemoAppointments(db, date, userId) {
     const patient = patients.find((x) => x.dni === p.dni);
     // Reparte entre los equipos de esa modalidad (equipo 1, 2, …).
     const sameMod = equipment.filter((e) => e.modality === item.mod);
-    const eq = sameMod.length ? sameMod[mix(offset + 41, index + 3) % sameMod.length] : null;
+    // Con pacientes de la demo, el equipo menos cargado del día (reparte 1 y 2).
+    const load = (e) => existing.filter((x) => x.equipment_id === e.id).length;
+    const eq = !sameMod.length
+      ? null
+      : pool
+        ? [...sameMod].sort((x, y) => load(x) - load(y) || mix(offset, x.id) - mix(offset, y.id))[0]
+        : sameMod[mix(offset + 41, index + 3) % sameMod.length];
     const study = studies.find((x) => x.code === item.study) || studies.find((x) => x.modality === item.mod);
     // Datos mínimos para poder dar el turno.
     if (!patient || !eq || !study) {

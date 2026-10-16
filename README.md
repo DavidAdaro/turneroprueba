@@ -87,12 +87,14 @@ se reparten así:
 | `claustrophobia`, `iodine`, `mobility` | notas del turno (administrativo) |
 | `renal`, `dialysis` | informe médico |
 | `oxygen` | notas del turno y observaciones del técnico |
+| `cochlear` (implante coclear, nunca RM), `metalFragments` (soldador), `insulinPump`, `tattoo`, `anticoagulated` | observaciones del técnico |
+| `pregnancy`, `latex`, `metformin` | notas del turno |
 | `prosthesis`, `glaucoma`, `obesity`, `pacemakerMR` | repartidas según el estudio |
 
 Los turnos de tus pacientes **se suman** a los que ya haya: si un horario
 del equipo está ocupado se usa el siguiente libre. Para agregarlos sin
 borrar nada: poné el archivo, corré `npm run setup` (no `reset-db`), `npm
-start` y el botón. Sin ese archivo, la demo usa pacientes inventados.
+start` y el botón. Además se suman los 10 pacientes **ficticios** de `backend/demo-patients.ficticios.json` (DNI 902000xx, sí van en el repo), con condiciones de bioseguridad y otras. Cada día hábil hay turnos en **todos los equipos** (dos por modalidad, repartidos entre equipo 1 y 2).
 
 Los pacientes tienen, en forma arbitraria (~60 %), condiciones clínicas que
 aparecen repartidas y coherentes en todo el circuito según el estudio:

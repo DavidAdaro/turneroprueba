@@ -1,0 +1,12 @@
+[
+  { "dni": "90200001", "first_name": "Sofía", "last_name": "Ibarra", "birth_date": "1990-08-14", "sex": "F", "insurance": "OSDE", "affiliate_number": "61290001", "weight_kg": 61, "conditions": ["pregnancy", "latex"], "extra": "Paciente ficticia" },
+  { "dni": "90200002", "first_name": "Hugo", "last_name": "Bustos", "birth_date": "1962-03-02", "sex": "M", "insurance": "APROSS", "affiliate_number": "0902002", "weight_kg": 92, "conditions": ["metalFragments", "metformin"], "extra": "Paciente ficticio" },
+  { "dni": "90200003", "first_name": "Rosa", "last_name": "Medina", "birth_date": "1955-11-20", "sex": "F", "insurance": "PAMI", "affiliate_number": "150902000301", "weight_kg": 58, "conditions": ["cochlear", "renal"], "extra": "Paciente ficticia" },
+  { "dni": "90200004", "first_name": "Diego", "last_name": "Funes", "birth_date": "1983-06-09", "sex": "M", "insurance": "SMG", "affiliate_number": "80902004", "weight_kg": 84, "conditions": ["tattoo", "claustrophobia"], "extra": "Paciente ficticio" },
+  { "dni": "90200005", "first_name": "Elena", "last_name": "Vidal", "birth_date": "1972-01-27", "sex": "F", "insurance": "OSDE", "affiliate_number": "61290005", "weight_kg": 66, "conditions": ["insulinPump", "iodine"], "extra": "Paciente ficticia" },
+  { "dni": "90200006", "first_name": "Raúl", "last_name": "Ojeda", "birth_date": "1949-09-15", "sex": "M", "insurance": "PAMI", "affiliate_number": "150902000601", "weight_kg": 77, "conditions": ["pacemakerMR", "anticoagulated"], "extra": "Paciente ficticio" },
+  { "dni": "90200007", "first_name": "Lorena", "last_name": "Paz", "birth_date": "1995-04-03", "sex": "F", "insurance": "PART", "affiliate_number": null, "weight_kg": 55, "conditions": ["biosafety", "glaucoma"], "extra": "Paciente ficticia" },
+  { "dni": "90200008", "first_name": "Marcelo", "last_name": "Quiroga", "birth_date": "1968-12-11", "sex": "M", "insurance": "APROSS", "affiliate_number": "0902008", "weight_kg": 118, "conditions": ["prosthesis", "obesity"], "extra": "Paciente ficticio" },
+  { "dni": "90200009", "first_name": "Julieta", "last_name": "Arce", "birth_date": "1987-07-22", "sex": "F", "insurance": "SMG", "affiliate_number": "80902009", "weight_kg": 63, "conditions": ["dialysis"], "extra": "Paciente ficticia" },
+  { "dni": "90200010", "first_name": "Tomás", "last_name": "Herrera", "birth_date": "1979-02-18", "sex": "M", "insurance": "OSDE", "affiliate_number": "61290010", "weight_kg": 80, "conditions": ["mobility", "anticoagulated", "iodine"], "extra": "Paciente ficticio" }
+]

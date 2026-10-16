@@ -40,9 +40,9 @@ export const CONDITIONS = {
     report: ({ mod }) => (mod === 'DX' ? 'Proyecciones obtenidas en sedestación.' : null),
   },
   obesity: {
-    patient: 'Obesidad (110 kg)',
-    note: ({ mod }) => (mod === 'MR' || mod === 'CT' ? 'Peso 110 kg: dentro del límite de la camilla (máx. 200 kg); verificar diámetro del túnel.' : null),
-    tech: ({ mod }) => (mod === 'US' ? 'Ventana acústica limitada por panículo adiposo.' : 'Peso 110 kg dentro del límite de la camilla; se ajustaron los parámetros de adquisición.'),
+    patient: 'Obesidad (más de 110 kg)',
+    note: ({ mod }) => (mod === 'MR' || mod === 'CT' ? 'Peso elevado: confirmar que está dentro del límite de la camilla (máx. 200 kg) y el diámetro del túnel.' : null),
+    tech: ({ mod }) => (mod === 'US' ? 'Ventana acústica limitada por panículo adiposo.' : 'Peso dentro del límite de la camilla; se ajustaron los parámetros de adquisición.'),
     report: ({ mod }) => (mod === 'US' || mod === 'CT' ? 'Evaluación parcialmente limitada por el hábito corporal.' : null),
   },
   biosafety: {
@@ -54,6 +54,79 @@ export const CONDITIONS = {
         ? 'Bioseguridad: formulario de seguridad RM firmado; clip de aneurisma de titanio verificado como RM condicional (≤3T); se retiraron piercings.'
         : 'Se retiraron piercings y elementos metálicos del campo.',
     report: ({ mod, zone }) => (mod === 'MR' && zone === 'cerebro' ? 'Artefacto de susceptibilidad por clip quirúrgico en territorio de la arteria cerebral media derecha.' : null),
+  },
+  // ---- Bioseguridad y otras (pacientes ficticios) ----
+  cochlear: {
+    patient: 'Implante coclear derecho (NO apto RM sin protocolo del fabricante)',
+    noMR: true,
+    always: ['tech'],
+    note: ({ mod }) => (mod === 'CT' ? 'Implante coclear: por eso TC y no RM.' : 'Implante coclear: no ingresar a la sala de RM.'),
+    tech: ({ mod }) =>
+      mod === 'CT' ? 'Artefacto metálico del implante coclear en peñasco derecho; se reconstruyó con algoritmo de reducción de artefactos.' : 'Bioseguridad: implante coclear; se retiró el procesador externo durante el estudio.',
+    report: ({ mod, zone }) => (mod === 'CT' && zone === 'cerebro' ? 'Artefacto por implante coclear derecho que limita la evaluación del peñasco homolateral.' : null),
+  },
+  metalFragments: {
+    patient: 'Soldador: riesgo de esquirlas metálicas oculares',
+    always: ['tech'],
+    note: ({ mod }) => (mod === 'MR' ? 'BIOSEGURIDAD RM: soldador; hacer Rx de órbitas antes de la RM para descartar esquirlas.' : 'Antecedente laboral de soldadura (esquirlas metálicas).'),
+    tech: ({ mod }) =>
+      mod === 'MR'
+        ? 'Bioseguridad: Rx de órbitas previa negativa para cuerpos extraños metálicos; cuestionario de seguridad RM firmado.'
+        : 'Se interrogó sobre elementos metálicos (soldador); sin hallazgos que contraindiquen el estudio.',
+    report: ({ mod }) => (mod === 'DX' ? 'No se observan cuerpos extraños radiopacos en las órbitas.' : null),
+  },
+  insulinPump: {
+    patient: 'Diabetes tipo 1 con bomba de insulina y sensor de glucosa',
+    always: ['tech'],
+    note: ({ mod }) =>
+      mod === 'MR' || mod === 'CT' ? 'Bomba de insulina y sensor: retirarlos antes de entrar a la sala (traer insumos de recambio).' : 'Usa bomba de insulina.',
+    tech: ({ mod }) =>
+      mod === 'MR' || mod === 'CT'
+        ? 'Bioseguridad: se desconectaron bomba de insulina y sensor de glucosa durante el estudio; reconectados al finalizar.'
+        : 'Bomba de insulina fuera del campo de exposición.',
+    report: () => null,
+  },
+  tattoo: {
+    patient: 'Tatuajes extensos en ambos brazos y espalda',
+    always: ['tech'],
+    note: ({ mod }) => (mod === 'MR' ? 'Tatuajes extensos: avisarle que informe si siente calor durante la RM.' : null),
+    tech: ({ mod }) =>
+      mod === 'MR' ? 'Bioseguridad: tatuajes extensos; compresas frías y control verbal; sin calentamiento referido.' : 'Tatuajes extensos sin implicancia para el estudio.',
+    report: () => null,
+  },
+  pregnancy: {
+    patient: 'Posible embarazo (FUM hace 6 semanas)',
+    always: ['note'],
+    note: ({ mod }) =>
+      mod === 'US'
+        ? 'Posible embarazo: la ecografía no tiene restricciones.'
+        : mod === 'MR'
+          ? 'Posible embarazo: RM sin gadolinio y solo si el médico lo justifica; confirmar con test.'
+          : 'POSIBLE EMBARAZO: pedir test antes del estudio; si es positivo, reprogramar o consultar con el médico.',
+    tech: ({ mod }) => (mod === 'DX' || mod === 'CT' || mod === 'MG' ? 'Test de embarazo negativo; protector plomado abdominal.' : null),
+    report: ({ mod }) => (mod === 'DX' || mod === 'CT' ? 'Estudio realizado con protección plomada abdominal.' : null),
+  },
+  latex: {
+    patient: 'ALERGIA AL LÁTEX',
+    always: ['note', 'tech'],
+    note: () => 'ALERGIA AL LÁTEX: preparar sala y material libres de látex (guantes de nitrilo).',
+    tech: () => 'Sala y material libres de látex; sin reacciones.',
+    report: () => null,
+  },
+  anticoagulated: {
+    patient: 'Anticoagulado (acenocumarol)',
+    always: ['tech'],
+    note: ({ contrast }) => (contrast ? 'Anticoagulado: avisar al técnico para compresión prolongada de la vía.' : null),
+    tech: ({ contrast }) => (contrast ? 'Anticoagulado: compresión de 5 minutos del sitio de punción, sin hematoma.' : 'Paciente anticoagulado, sin incidencias.'),
+    report: () => null,
+  },
+  metformin: {
+    patient: 'Diabético tipo 2 en tratamiento con metformina',
+    always: ['note'],
+    note: ({ contrast, mod }) =>
+      contrast && mod === 'CT' ? 'Metformina: suspenderla 48 h después del contraste y retomar con función renal normal.' : 'Diabético con metformina: no suspenderla (estudio sin contraste iodado); puede desayunar si no requiere ayuno.',
+    tech: ({ contrast }) => (contrast ? 'Se indicó suspender metformina 48 h post contraste.' : null),
+    report: () => null,
   },
   dialysis: {
     patient: 'Insuficiencia renal crónica en hemodiálisis (lun-mié-vie). Fístula AV en brazo izquierdo',
