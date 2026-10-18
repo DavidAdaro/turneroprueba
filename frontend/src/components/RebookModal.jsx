@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { useCatalog } from './useCatalogs';
 import { Alert, ErrorMsg, Field, Modal } from './ui';
+import OrderFields, { EMPTY_ORDER } from './OrderFields';
 import { formatDate, today } from '../utils';
 
 // Dar un turno nuevo a un paciente ya conocido (por ejemplo, alguien que ya
@@ -17,10 +18,10 @@ export default function RebookModal({ patient, defaults = {}, onClose, onBooked 
     date: today(),
     insurance_id: patient.insurance_id ?? '',
     care_type: 'AMB',
+    ...EMPTY_ORDER,
     referring_physician: defaults.referring_physician || '',
-    clinical_indication: defaults.clinical_indication || '',
+    order_physician_license: defaults.order_physician_license || '',
     notes: '',
-    order_received: false,
   });
   const [slot, setSlot] = useState(null);
   const [manual, setManual] = useState('');
@@ -155,19 +156,11 @@ export default function RebookModal({ patient, defaults = {}, onClose, onBooked 
               <option value="GUA">Guardia</option>
             </select>
           </Field>
-          <Field label="Médico derivante">
-            <input className="input" value={form.referring_physician} onChange={set('referring_physician')} />
-          </Field>
-          <Field label="Indicación" className="sm:col-span-3">
-            <input className="input" value={form.clinical_indication} onChange={set('clinical_indication')} />
-          </Field>
           <Field label="Notas del turno" className="sm:col-span-3">
             <input className="input" value={form.notes} onChange={set('notes')} />
           </Field>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.order_received} onChange={set('order_received')} /> Ya presentó la orden médica
-        </label>
+        <OrderFields form={form} set={set} />
         <ErrorMsg error={error} />
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>

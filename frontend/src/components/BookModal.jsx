@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api';
 import { useCatalog } from './useCatalogs';
 import PatientPicker from './PatientPicker';
+import OrderFields, { EMPTY_ORDER } from './OrderFields';
 import { Alert, ErrorMsg, Field, Modal } from './ui';
 import { longDate } from '../utils';
 
@@ -16,9 +17,7 @@ export default function BookModal({ equipment, date, startTime, overbook: initia
     study_id: '',
     start_time: startTime,
     insurance_id: '',
-    referring_physician: '',
-    clinical_indication: '',
-    order_received: false,
+    ...EMPTY_ORDER,
     notes: '',
     overbook: initialOverbook,
     care_type: 'AMB',
@@ -96,25 +95,17 @@ export default function BookModal({ equipment, date, startTime, overbook: initia
                   <option value="GUA">Guardia</option>
                 </select>
               </Field>
-              <Field label="Médico derivante">
-                <input className="input" value={form.referring_physician} onChange={set('referring_physician')} />
-              </Field>
-              <Field label="Indicación">
-                <input className="input" value={form.clinical_indication} onChange={set('clinical_indication')} />
-              </Field>
             </div>
             {study?.preparation && (
               <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
                 <b>Preparación a informar:</b> {study.preparation}
               </div>
             )}
+            <OrderFields form={form} set={set} />
             <Field label="Notas internas">
               <input className="input" value={form.notes} onChange={set('notes')} />
             </Field>
             <div className="flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={form.order_received} onChange={set('order_received')} /> Ya presentó la orden médica
-              </label>
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={form.overbook} onChange={set('overbook')} /> Sobreturno
               </label>

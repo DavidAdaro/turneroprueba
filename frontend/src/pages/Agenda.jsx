@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
 import { api } from '../api';
 import { useData } from '../components/useData';
 import AppointmentModal from '../components/AppointmentModal';
 import BookModal from '../components/BookModal';
 import { Empty, ErrorMsg, ModalityTag, PageHeader, StatusBadge } from '../components/ui';
-import { STATUS, addDays, longDate, patientName, today } from '../utils';
+import { ROW_COLORS, STATUS, addDays, isoDate, longDate, patientName, today } from '../utils';
 
 const savedEquipment = () => {
   try {
@@ -16,7 +17,13 @@ const savedEquipment = () => {
 };
 
 export default function Agenda() {
-  const [date, setDate] = useState(today());
+  const [params, setParams] = useSearchParams();
+  // Misma fecha que el Turnero del día (viene en ?date= y se mantiene en la URL).
+  const [date, setDateState] = useState(() => (isoDate(params.get('date')) ? params.get('date') : today()));
+  const setDate = (d) => {
+    setDateState(d);
+    setParams({ date: d }, { replace: true });
+  };
   const [equipmentId, setEquipmentId] = useState(savedEquipment);
   const [book, setBook] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -40,7 +47,8 @@ export default function Agenda() {
 
   return (
     <div>
-      <PageHeader title="Turnos" subtitle="Agenda por equipo. Click en un horario libre para dar turno.">
+      <PageHeader title="Dar turnos" subtitle="Agenda por equipo. Click en un horario libre para dar turno.">
+        <Link to={`/turnero?date=${date}`} className="btn-secondary">Ver en Turnero del día</Link>
         <form onSubmit={search} className="relative">
           <Search size={15} className="absolute top-2 left-2.5 text-slate-400" />
           <input className="input w-64 pl-8" placeholder="Buscar turno: DNI, apellido, N° acceso" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -197,22 +205,33 @@ function EquipmentColumn({ agenda, single, onFree, onOverbook, onOpen }) {
 }
 
 function AppointmentChip({ a, continued, onOpen }) {
-  const s = STATUS[a.status];
+  // Mismos colores e información que la fila del Turnero del día.
   return (
     <button
       onClick={() => onOpen(a.id)}
-      className={`my-0.5 block w-full rounded border px-2 py-1 text-left text-xs ${s.cls} ${continued ? 'opacity-50' : ''}`}
+      style={{ background: ROW_COLORS[a.status] }}
+      className={`my-0.5 block w-full rounded px-2 py-1 text-left text-xs text-white hover:brightness-110 ${continued ? 'opacity-50' : ''} ${a.status === 'cancelled' ? 'line-through opacity-60' : ''}`}
+      title={[STATUS[a.status].label, a.notes && `Nota: ${a.notes}`, a.patient_notes && `Paciente: ${a.patient_notes}`].filter(Boolean).join('\n')}
     >
-      <div className="truncate font-medium">
-        {continued ? '↳ ' : ''}
-        {patientName(a)}
+      <div className="flex justify-between gap-1 truncate font-medium">
+        <span className="truncate uppercase">
+          {continued ? '↳ ' : ''}
+          {patientName(a)}
+        </span>
+        {!continued && <span className="shrink-0 font-normal opacity-80">{STATUS[a.status].label}</span>}
       </div>
       {!continued && (
-        <div className="truncate opacity-80">
-          {a.study_name} · {a.insurance_name || 'Sin cobertura'}
-          {a.study_contrast ? ' · 💉' : ''}
-          {a.reminder_sent_at ? ' · ✉' : ''}
-        </div>
+        <>
+          <div className="truncate opacity-90">
+            {a.study_name} · {a.insurance_code || a.insurance_name || 'S/C'}
+            {a.study_contrast ? ' · contraste' : ''}
+          </div>
+          <div className="truncate opacity-75">
+            DNI {a.dni} · Ficha {a.accession_number || '—'}
+            {!a.order_received ? ' · falta pedido' : ''}
+          </div>
+          {(a.notes || a.patient_notes) && <div className="truncate text-yellow-200">✎ {a.notes || a.patient_notes}</div>}
+        </>
       )}
     </button>
   );
@@ -220,9 +239,9 @@ function AppointmentChip({ a, continued, onOpen }) {
 
 function Legend() {
   return (
-    <div className="flex flex-wrap gap-2 text-xs">
-      {Object.entries(STATUS).map(([k, s]) => (
-        <span key={k} className={`rounded-full border px-2 py-0.5 ${s.cls}`}>{s.label}</span>
+    <div className="flex flex-wrap gap-1.5 text-xs">
+      {Object.entries(ROW_COLORS).map(([k, c]) => (
+        <span key={k} className="rounded px-2 py-0.5 text-white" style={{ background: c }}>{STATUS[k].label}</span>
       ))}
     </div>
   );

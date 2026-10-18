@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, CalendarPlus, ExternalLink, MessageCircle, Printer } from 'lucide-react';
+import { CalendarClock, CalendarPlus, ExternalLink, FileText, MessageCircle, Printer } from 'lucide-react';
 import RebookModal from './RebookModal';
+import OrderFields, { orderFrom } from './OrderFields';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useData } from './useData';
@@ -46,13 +47,10 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
   const openMode = (m) => {
     setError('');
     setMode(m);
-    if (m === 'admit') {
-      setForm({
-        order_received: !!a.order_received,
-        authorization_number: a.authorization_number || '',
-        referring_physician: a.referring_physician || '',
-        clinical_indication: a.clinical_indication || '',
-      });
+    if (m === 'order') {
+      setForm(orderFrom(a));
+    } else if (m === 'admit') {
+      setForm({ ...orderFrom(a), authorization_number: a.authorization_number || '' });
     } else if (m === 'reschedule') {
       setForm({ date: a.date, start_time: a.start_time, equipment_id: a.equipment_id, overbook: false });
       setFree(null);
@@ -114,11 +112,17 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
           </div>
           {a.study_contrast ? <div className="text-xs font-medium text-purple-700">Estudio con contraste</div> : null}
           {a.study_preparation && <div className="text-xs text-slate-600">Preparación: {a.study_preparation}</div>}
-          <div className="text-slate-600">Derivante: {a.referring_physician || '—'}</div>
-          <div className="text-slate-600">Indicación: {a.clinical_indication || '—'}</div>
-          <div className="text-slate-600">
-            Orden médica: {a.order_received ? 'recibida' : 'pendiente'}
-            {a.requires_authorization ? ` · Autorización: ${a.authorization_number || 'pendiente'}` : ''}
+          <div className="mt-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
+            <div className="mb-0.5 flex items-center justify-between font-semibold">
+              Pedido médico
+              <span className={a.order_received ? 'text-emerald-700' : 'text-amber-700'}>{a.order_received ? 'recibido' : 'pendiente'}</span>
+            </div>
+            <div>Solicita: {a.referring_physician || '—'}{a.order_physician_license ? ` · ${a.order_physician_license}` : ''}</div>
+            <div>Fecha: {a.order_date ? a.order_date.split('-').reverse().join('/') : '—'} · Código: {a.order_code || '—'}</div>
+            <div>Diagnóstico: {a.clinical_indication || '—'}</div>
+            {a.order_observations && <div className="italic">“{a.order_observations}”</div>}
+            <Link to={`/pedido/${a.id}`} target="_blank" className="mt-0.5 inline-block text-blue-700 hover:underline">Ver pedido escaneado ↗</Link>
+            {a.requires_authorization ? <div>Autorización: {a.authorization_number || 'pendiente'}</div> : null}
           </div>
           {a.accession_number && (
             <div className="font-mono text-xs">
@@ -154,24 +158,26 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
       {mode === 'admit' && (
         <div className="mt-4 space-y-3 rounded-md border border-amber-200 bg-amber-50/50 p-3">
           <div className="text-sm font-medium">Admisión del paciente</div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.order_received} onChange={set('order_received')} /> Orden médica recibida
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={`N° de autorización${a.requires_authorization ? ' *' : ''}`}>
-              <input className="input" value={form.authorization_number} onChange={set('authorization_number')} />
-            </Field>
-            <Field label="Médico derivante">
-              <input className="input" value={form.referring_physician} onChange={set('referring_physician')} />
-            </Field>
-            <Field label="Indicación / diagnóstico presuntivo" className="sm:col-span-2">
-              <input className="input" value={form.clinical_indication} onChange={set('clinical_indication')} />
-            </Field>
-          </div>
+          <OrderFields form={form} set={set} title="Pedido médico (verificar contra el original)" />
+          <Field label={`N° de autorización${a.requires_authorization ? ' *' : ''}`}>
+            <input className="input" value={form.authorization_number} onChange={set('authorization_number')} />
+          </Field>
           <div className="flex justify-end gap-2">
             <button className="btn-secondary" onClick={() => setMode(null)}>Volver</button>
             <button className="btn-success" disabled={busy} onClick={() => action('admit', form)}>
               Admitir y generar N° de acceso
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'order' && (
+        <div className="mt-4 space-y-3 rounded-md border border-blue-200 bg-blue-50/40 p-3">
+          <OrderFields form={form} set={set} />
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setMode(null)}>Volver</button>
+            <button className="btn-primary" disabled={busy} onClick={() => run(() => api.updateAppointment(id, form))}>
+              Guardar pedido
             </button>
           </div>
         </div>
@@ -315,6 +321,11 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
           {can('admin', 'radiologist') && a.status === 'completed' && (
             <Link className="btn-primary" to={`/informes/${a.id}`}>Informar</Link>
           )}
+          {can('admin', 'reception') && a.status !== 'cancelled' && (
+            <button className="btn-secondary" onClick={() => openMode('order')}>
+              <FileText size={15} /> Pedido médico
+            </button>
+          )}
           {can('admin', 'reception') && (
             <button className="btn-secondary" onClick={() => setRebook(true)}>
               <CalendarPlus size={15} /> Nuevo turno para el paciente
@@ -346,7 +357,7 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
             insurance_id: a.insurance_id,
             notes: a.patient_notes,
           }}
-          defaults={{ equipment_id: a.equipment_id, referring_physician: a.referring_physician }}
+          defaults={{ equipment_id: a.equipment_id, referring_physician: a.referring_physician, order_physician_license: a.order_physician_license }}
           onClose={() => setRebook(false)}
           onBooked={(n) => {
             setRebook(false);

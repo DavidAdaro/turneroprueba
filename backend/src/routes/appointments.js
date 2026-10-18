@@ -150,8 +150,9 @@ appointments.post('/', requireRole('admin', 'reception'), async (c) => {
   const row = await db
     .prepare(
       `INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, overbook, insurance_id,
-        authorization_number, referring_physician, clinical_indication, order_received, notes, care_type, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+        authorization_number, referring_physician, clinical_indication, order_received, notes, care_type,
+        order_date, order_physician_license, order_code, order_observations, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
     )
     .bind(
       equipmentId,
@@ -168,6 +169,10 @@ appointments.post('/', requireRole('admin', 'reception'), async (c) => {
       toBool(body.order_received),
       clean(body.notes),
       CARE_TYPES.includes(body.care_type) ? body.care_type : 'AMB',
+      isDate(body.order_date) ? body.order_date : null,
+      clean(body.order_physician_license),
+      clean(body.order_code),
+      clean(body.order_observations),
       user.id
     )
     .first();
@@ -182,6 +187,10 @@ const EDITABLE = {
   referring_physician: clean,
   clinical_indication: clean,
   order_received: toBool,
+  order_date: (v) => (isDate(v) ? v : null),
+  order_physician_license: clean,
+  order_code: clean,
+  order_observations: clean,
   notes: clean,
   technician_notes: clean,
   care_type: (v) => (CARE_TYPES.includes(v) ? v : 'AMB'),
@@ -260,11 +269,15 @@ appointments.post('/:id/actions/:action', async (c) => {
       }
       sets.push("status = 'arrived'", "arrived_at = datetime('now')", 'order_received = 1', 'authorization_number = ?');
       values.push(authorization);
-      for (const f of ['referring_physician', 'clinical_indication']) {
+      for (const f of ['referring_physician', 'clinical_indication', 'order_physician_license', 'order_code', 'order_observations']) {
         if (f in body) {
           sets.push(`${f} = ?`);
           values.push(clean(body[f]));
         }
+      }
+      if ('order_date' in body) {
+        sets.push('order_date = ?');
+        values.push(isDate(body.order_date) ? body.order_date : null);
       }
       if (!current.accession_number) {
         // El N° de acceso y el StudyInstanceUID se asignan acá y viajan a la

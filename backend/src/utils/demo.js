@@ -1,5 +1,6 @@
 import { nextAccessionNumber, newDicomUid } from './pacs';
 import { fromMinutes, nowLocal, toMinutes } from './time';
+import { blocksForDate, findBlock, schedulesForDate } from './slots';
 import { canDo, conditionTexts, conditionsForPool, patientNotesFor, zoneOf } from './demoConditions';
 
 // Datos 100 % ficticios para probar el RIS: pacientes (DNI 9000xxxx),
@@ -143,6 +144,37 @@ function poolItems(pool, offset, weekday) {
   return items;
 }
 
+// ---- Pedido médico ficticio (como lo escribe un médico a mano) ----
+const ABBREV = [
+  [/Resonancia magnética|^RM /i, 'RMN '],
+  [/^TC /i, 'TAC '],
+  [/con gadolinio/i, 'c/ y s/ gadolinio'],
+  [/con contraste/i, 'c/ cte. EV'],
+  [/sin contraste/i, 's/ cte.'],
+  [/\(frente y perfil\)/i, 'F y P'],
+  [/Ecografía/i, 'Eco'],
+  [/Mamografía bilateral/i, 'Mamografía bilat.'],
+  [/columna lumbosacra/i, 'col. lumbosacra'],
+  [/columna lumbar/i, 'col. lumbar'],
+];
+const ORDER_TEMPLATES = [
+  (s, dx) => `Solicito ${s}. Dx: ${dx}.`,
+  (s, dx) => `Sírvase realizar ${s}. Motivo: ${dx}.`,
+  (s, dx) => `${s} — ${dx}. Gracias.`,
+  (s, dx) => `Solicito ${s} (${dx}). Traer estudios previos.`,
+  (s, dx) => `Favor realizar ${s}. Dx presuntivo: ${dx}. Control.`,
+];
+const abbrev = (name) => ABBREV.reduce((t, [re, to]) => t.replace(re, to), name).replace(/\s+/g, ' ').trim();
+const licenseFor = (name) => `MP ${10000 + (mix(String(name || '').length * 31, [...String(name || '')].reduce((h, ch) => h + ch.charCodeAt(0), 0)) % 30000)}`;
+
+// [order_date, order_physician_license, order_code, order_observations]
+function orderFor(item, study, date, offset, index) {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (3 + (mix(offset + 61, index) % 18)));
+  const text = ORDER_TEMPLATES[mix(offset + 67, index) % ORDER_TEMPLATES.length](abbrev(study.name), (item.ind || '').toLowerCase());
+  return [d.toISOString().slice(0, 10), licenseFor(item.ref), `${study.code} x1`, text];
+}
+
 const DONE = ['delivered', 'reported', 'completed'];
 
 // Hora local del centro (UTC-3) → timestamp UTC de SQLite.
@@ -178,12 +210,14 @@ export async function createDemoAppointments(db, date, userId) {
   const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
   if (weekday === 0) return { created: 0, skipped: 0 }; // domingo: cerrado
 
-  const [{ results: equipment }, { results: studies }, { results: insurances }, tech, radiologist] = await Promise.all([
+  const [{ results: equipment }, { results: studies }, { results: insurances }, tech, radiologist, { results: schedules }, { results: blocks }] = await Promise.all([
     db.prepare('SELECT * FROM equipment WHERE active = 1 ORDER BY id').all(),
     db.prepare('SELECT * FROM studies WHERE active = 1').all(),
     db.prepare('SELECT * FROM insurances').all(),
     db.prepare("SELECT id FROM users WHERE role = 'technician' AND active = 1 ORDER BY id LIMIT 1").first(),
     db.prepare("SELECT id FROM users WHERE role = 'radiologist' AND active = 1 ORDER BY id LIMIT 1").first(),
+    db.prepare('SELECT * FROM schedules').all(),
+    db.prepare('SELECT * FROM schedule_blocks WHERE start_date <= ? AND end_date >= ?').bind(date, date).all(),
   ]);
   const insuranceId = (code) => insurances.find((i) => i.code === code)?.id ?? null;
 
@@ -257,17 +291,28 @@ export async function createDemoAppointments(db, date, userId) {
     }
     let time = item.time;
     if (pool) {
-      // Con pacientes propios se SUMAN turnos a lo que ya haya: si el
-      // horario del equipo está ocupado se busca el siguiente libre (de a
-      // 10 min). Un paciente no repite turno en el mismo día.
+      // Con pacientes de la demo se SUMAN turnos a lo que ya haya y SOLO en
+      // horarios de la grilla del equipo (los mismos que muestra "Dar
+      // turnos"): el primer inicio de slot libre desde la hora sugerida, y si
+      // no hay, el primero libre del día. Un paciente no repite turno el mismo día.
       const dur = study.duration_minutes;
       const clash = (t) =>
         existing.some((e) => e.equipment_id === eq.id && toMinutes(e.start_time) < toMinutes(t) + dur && toMinutes(t) < toMinutes(e.end_time));
-      for (let k = 0; k < 60 && clash(time); k++) time = plus(time, 10);
-      if (existing.some((e) => e.patient_id === patient.id) || clash(time) || toMinutes(time) + dur > 20 * 60) {
+      const dayBlocks = blocksForDate(blocks, eq.id, date);
+      const starts = [];
+      for (const sc of schedulesForDate(schedules, eq.id, date)) {
+        for (let m = toMinutes(sc.start_time); m + dur <= toMinutes(sc.end_time); m += sc.slot_minutes) {
+          if (!findBlock(dayBlocks, m, m + dur)) starts.push(fromMinutes(m));
+        }
+      }
+      starts.sort();
+      const ordered = [...starts.filter((t) => t >= item.time), ...starts.filter((t) => t < item.time)];
+      const free = ordered.find((t) => !clash(t));
+      if (existing.some((e) => e.patient_id === patient.id) || !free) {
         skipped++;
         continue;
       }
+      time = free;
       existing.push({ patient_id: patient.id, equipment_id: eq.id, start_time: time, end_time: plus(time, dur) });
     } else if (existing.some((e) => e.patient_id === patient.id || e.start_time === item.time)) {
       // No duplicar: mismo paciente u horario ocupado.
@@ -292,8 +337,9 @@ export async function createDemoAppointments(db, date, userId) {
           `INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, status, care_type,
             insurance_id, authorization_number, referring_physician, clinical_indication, order_received, notes, cancel_reason,
             accession_number, study_instance_uid, pacs_status, image_count, technician_id, technician_notes,
-            arrived_at, started_at, completed_at, delivered_at, delivered_to, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            arrived_at, started_at, completed_at, delivered_at, delivered_to, created_by,
+            order_date, order_physician_license, order_code, order_observations)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           eq.id,
@@ -322,7 +368,8 @@ export async function createDemoAppointments(db, date, userId) {
           done ? toUtc(date, plus(time, study.duration_minutes + 6)) : null,
           status === 'delivered' ? toUtc(date, plus(time, 300)) : null,
           status === 'delivered' ? 'Paciente' : null,
-          userId
+          userId,
+          ...orderFor(item, study, date, offset, index)
         )
     );
     // Informe firmado o borrador, enlazado por N° de acceso.

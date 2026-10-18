@@ -46,6 +46,29 @@ if (!existsSync(devVars)) {
 // 3. Base de datos local
 const d1 = (file) => run('npx', ['wrangler', 'd1', 'execute', 'turnero-db', '--local', `--file=${file}`], backend);
 const dbDir = join(backend, '.wrangler', 'state', 'v3', 'd1');
+const migrationFiles = () => readdirSync(join(backend, 'migrations')).filter((x) => x.endsWith('.sql')).sort();
+function d1Query(sql) {
+  const r = spawnSync(`npx wrangler d1 execute turnero-db --local --json --command "${sql}"`, { cwd: backend, shell: true, encoding: 'utf8' });
+  const out = r.stdout || '';
+  try {
+    return JSON.parse(out.slice(out.indexOf('[')))[0]?.results || [];
+  } catch {
+    return null;
+  }
+}
+function appliedMigrations() {
+  d1Query('CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TEXT)');
+  const rows = d1Query('SELECT name FROM _migrations');
+  if (!rows) {
+    console.error('\n✘ No pude leer las migraciones aplicadas de la base local.');
+    process.exit(1);
+  }
+  return new Set(rows.map((r) => r.name));
+}
+function markMigrations(files) {
+  const values = files.map((f) => `('${f}', datetime('now'))`).join(', ');
+  d1Query(`CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TEXT); INSERT OR IGNORE INTO _migrations (name, applied_at) VALUES ${values}`);
+}
 if (reset && existsSync(dbDir)) {
   rmSync(dbDir, { recursive: true, force: true });
   console.log('\n✔ Base local borrada');
@@ -53,10 +76,17 @@ if (reset && existsSync(dbDir)) {
 if (reset || !existsSync(dbDir)) {
   d1('./schema.sql');
   d1('./seed.sql');
+  markMigrations(migrationFiles()); // la base nueva ya nace con todo lo de las migraciones
   console.log('\n✔ Base local creada con datos de prueba');
 } else {
-  // Migraciones idempotentes, en orden: solo agregan/actualizan lo que falte.
-  for (const f of readdirSync(join(backend, 'migrations')).filter((x) => x.endsWith('.sql')).sort()) d1(`./migrations/${f}`);
+  // Migraciones en orden; se anotan en _migrations para no repetirlas
+  // (algunas, como ALTER TABLE, no se pueden correr dos veces).
+  const applied = appliedMigrations();
+  for (const f of migrationFiles()) {
+    if (applied.has(f)) continue;
+    d1(`./migrations/${f}`);
+    markMigrations([f]);
+  }
   console.log('\n✔ Base local existente actualizada (migraciones aplicadas)');
 }
 

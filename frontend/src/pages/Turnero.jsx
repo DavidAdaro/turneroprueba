@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowDownCircle,
   ArrowRightCircle,
@@ -28,20 +28,9 @@ import { useData } from '../components/useData';
 import { useCatalog } from '../components/useCatalogs';
 import AppointmentModal from '../components/AppointmentModal';
 import RebookModal from '../components/RebookModal';
-import { STATUS, addDays, age, longDate, today, viewerUrl, whatsappLink } from '../utils';
+import { orderSummary } from '../components/OrderFields';
+import { ROW_COLORS, STATUS, addDays, age, isoDate, longDate, today, viewerUrl, whatsappLink } from '../utils';
 
-// Color de fondo de cada fila según el estado del turno (estilo planilla).
-export const ROW_COLORS = {
-  given: '#2b3350',
-  confirmed: '#2f4470',
-  arrived: '#8a6418',
-  in_progress: '#5d3d91',
-  completed: '#a5385a',
-  reported: '#8c2f5e',
-  delivered: '#6e2a4c',
-  absent: '#4a4a4f',
-  cancelled: '#2a2a2e',
-};
 
 const CARE_COLORS = { AMB: '#6aa84f', INT: '#3d85c6', GUA: '#cc4125' };
 const CARE_LABELS = { AMB: 'Ambulatorio', INT: 'Internado', GUA: 'Guardia' };
@@ -68,7 +57,12 @@ export default function Turnero() {
   const navigate = useNavigate();
   const settings = useCatalog('settings');
   const equipment = useCatalog('equipment') || [];
-  const [date, setDate] = useState(today());
+  const [params, setParams] = useSearchParams();
+  const [date, setDateState] = useState(() => (isoDate(params.get('date')) ? params.get('date') : today()));
+  const setDate = (d) => {
+    setDateState(d);
+    setParams({ date: d }, { replace: true });
+  };
   const [modality, setModality] = useState('');
   const [hideCancelled, setHideCancelled] = useState(true);
   const [open, setOpen] = useState(null);
@@ -144,7 +138,7 @@ export default function Turnero() {
         <div className="ml-auto flex gap-2">
           <button className="flex items-center gap-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20" onClick={reload}><RefreshCw size={14} /> Actualizar</button>
           {can('admin', 'reception') && (
-            <button className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 hover:bg-emerald-500" onClick={() => navigate('/turnos')}><Plus size={14} /> Nuevo turno</button>
+            <button className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 hover:bg-emerald-500" onClick={() => navigate(`/turnos?date=${date}`)}><Plus size={14} /> Nuevo turno</button>
           )}
           {can('admin') && (
             <button
@@ -297,7 +291,7 @@ export default function Turnero() {
                   <td className={td}>{a.modality}</td>
                   {/* Aseguradora + orden médica */}
                   <td className={td}>
-                    <span title={a.order_received ? 'Orden médica recibida' : 'Falta orden médica'} className="relative inline-block">
+                    <span title={`${orderSummary(a)}\n(click: ver pedido)`} className="relative inline-block cursor-pointer" onClick={() => window.open(`/pedido/${a.id}`, '_blank')}>
                       <FileText size={22} className="text-white/80" />
                       {!a.order_received && <span className="absolute top-0 right-0 h-2 w-2 bg-red-500" />}
                     </span>

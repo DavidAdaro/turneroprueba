@@ -109,6 +109,19 @@ integration.post('/study-received', requireScope('pacs:write'), async (c) => {
   return c.json({ ok: true, appointment_id: appt.id });
 });
 
+// Pedido médico del turno (mismos nombres que los pedidos de InPatient).
+const medicalOrderOf = (a) => ({
+  received: !!a.order_received,
+  ordering_physician: a.referring_physician,
+  ordering_physician_license: a.order_physician_license,
+  order_date: a.order_date,
+  code: a.order_code,
+  study_requested: a.study_name,
+  reason: a.clinical_indication,
+  observations: a.order_observations,
+  authorization_number: a.authorization_number,
+});
+
 // ---- Datos clínicos (permiso clinical:read) ----
 // Solo se expone el texto de informes FIRMADOS; un borrador figura como
 // { status: 'draft' } sin contenido.
@@ -247,6 +260,7 @@ integration.get('/schedule', requireScope('schedule:read'), async (c) => {
       authorization_number: a.authorization_number,
       referring_physician: a.referring_physician,
       order_received: !!a.order_received,
+      medical_order: medicalOrderOf(a),
       arrived_at: a.arrived_at,
       started_at: a.started_at,
       completed_at: a.completed_at,
@@ -294,6 +308,7 @@ integration.get('/patients/:dni', requireScope('clinical:read'), async (c) => {
       equipment: a.equipment_name,
       referring_physician: a.referring_physician,
       clinical_indication: a.clinical_indication,
+      medical_order: medicalOrderOf(a),
       appointment_notes: a.notes,
       technician_notes: a.technician_notes,
       report: clinicalOf(a, reports).report,

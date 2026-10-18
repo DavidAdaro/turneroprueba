@@ -4,6 +4,8 @@ export function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+export const isoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+
 export function addDays(date, days) {
   const d = new Date(`${date}T12:00:00`);
   d.setDate(d.getDate() + days);
@@ -107,3 +109,16 @@ export function whatsappLink(template, appointment, settings) {
   const phone = (appointment.patient_phone || '').replace(/\D/g, '');
   return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null;
 }
+
+// Color de fondo de cada fila según el estado del turno (Turnero y Dar turnos usan los mismos).
+export const ROW_COLORS = {
+  given: '#2b3350',
+  confirmed: '#2f4470',
+  arrived: '#8a6418',
+  in_progress: '#5d3d91',
+  completed: '#a5385a',
+  reported: '#8c2f5e',
+  delivered: '#6e2a4c',
+  absent: '#4a4a4f',
+  cancelled: '#2a2a2e',
+};

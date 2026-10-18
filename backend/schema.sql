@@ -137,6 +137,11 @@ CREATE TABLE appointments (
   referring_physician TEXT,     -- médico derivante
   clinical_indication TEXT,     -- diagnóstico presuntivo de la orden
   order_received INTEGER NOT NULL DEFAULT 0,
+  -- Pedido médico (mismos datos que los pedidos de InPatient)
+  order_date TEXT,              -- fecha del pedido
+  order_physician_license TEXT, -- matrícula del médico solicitante
+  order_code TEXT,              -- código/s pedidos (ej. "340101 x1")
+  order_observations TEXT,      -- texto del pedido / observaciones
   notes TEXT,
   cancel_reason TEXT,
   accession_number TEXT UNIQUE, -- se genera en la admisión

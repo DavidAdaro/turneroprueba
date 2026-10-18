@@ -56,6 +56,20 @@ misma modalidad) y una admisión se puede anular. Cada paso queda en el
   valor y autorización, agrupados por cobertura, exportable a CSV.
 - **Integración PACS / modalidades** (ver abajo).
 
+## Pedido médico
+
+Cada turno tiene su **pedido médico** (mismos datos que los pedidos de
+InPatient): médico solicitante y matrícula, fecha del pedido, código/s,
+diagnóstico o motivo, texto del pedido y si se presentó el original. Se carga
+al dar el turno, se puede corregir desde el detalle (botón **Pedido
+médico**) y se verifica al admitir. En la API sale como `medical_order` en
+`/schedule` y `/patients/:dni`.
+
+Los turnos de ejemplo traen pedidos **ficticios escritos como a mano**
+(abreviaturas tipo "Solicito RMN de cerebro c/ y s/ gadolinio"); el link
+**Ver pedido escaneado** (y el ícono del pedido en el Turnero) muestra el
+recetario manuscrito con firma y sello, marcado **PEDIDO FICTICIO**.
+
 ## Datos e imágenes de ejemplo
 
 En el **Turnero del día**, el administrador tiene el botón **Cargar turnos de
@@ -155,7 +169,7 @@ Abrí **http://localhost:5180**. `Ctrl+C` corta los dos.
 | Comando | Qué hace |
 | --- | --- |
 | `npm start` | Levanta backend (http://localhost:8788) y frontend (http://localhost:5180). |
-| `npm run setup` | Instala lo que falte y actualiza la base local **sin borrar datos** (correrlo después de un `git pull`). |
+| `npm run setup` | Instala lo que falte y aplica las migraciones pendientes a la base local **sin borrar datos** (correrlo después de un `git pull`). Las migraciones aplicadas se anotan en la tabla `_migrations`. |
 | `npm run stop` | Apaga lo que haya quedado prendido en los puertos 8788 y 5180 (por ejemplo, una ventana vieja de `npm run dev`). |
 | `npm run solo-mis-pacientes` | Borra todos los pacientes que no estén en `backend/demo-patients.local.json`, con sus turnos, informes e historial. Los tuyos quedan intactos. |
 | `npm run borrar-turnos` | Borra **todos los turnos** (estudios hechos y pendientes) con sus informes e historial. Quedan pacientes, equipos, catálogo de estudios, usuarios y API keys. |
