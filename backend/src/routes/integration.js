@@ -196,6 +196,17 @@ integration.get('/equipment', requireScope('schedule:read'), async (c) => {
   });
 });
 
+// Nomenclador: código de facturación de cada estudio activo, para que un
+// sistema externo (p. ej. InPatient) pueda ofrecer un desplegable en vez de
+// que alguien lo tipee a mano. Mismo permiso que /equipment (schedule:read)
+// porque es catálogo, no dato clínico de un paciente puntual. Solo estudios
+// activos y con código cargado — uno sin código no sirve para este fin.
+integration.get('/studies', requireScope('schedule:read'), async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT code, name FROM studies WHERE active = 1 AND code IS NOT NULL AND code != '' ORDER BY name")
+    .all();
+  return c.json({ studies: results.map((s) => ({ code: s.code, name: s.name })) });
+});
+
 // Turnero del día para sistemas externos (p. ej. InPatient): un turno por
 // elemento con paciente, estudio, cobertura, horarios y estado.
 // Query (todos opcionales):
