@@ -131,6 +131,18 @@ Rx), cortes con la rueda del mouse, brillo/contraste arrastrando, invertir,
 y al costado las notas del turno, observaciones e informe. Si se configura
 la URL de un visor real en Configuración → Centro, VM abre ese en su lugar.
 
+### Agenda completa, sin huecos
+
+Con pacientes de la demo, el botón **Cargar turnos de ejemplo** ocupa
+**todos los horarios** de todos los equipos (de 3 semanas atrás a 3
+adelante): los estudios largos toman varios slots seguidos y no se generan
+cancelados (dejarían el horario libre); queda algún que otro **ausente**.
+Los 15 pacientes de la demo aparecen todos los días y el resto se completa
+con **pacientes de relleno ficticios** (DNI 903xxxxx, ~500). Además se
+agregan **2 a 5 emergencias espontáneas por día** (1-2 los sábados) como
+sobreturno de guardia (TEC, dolor torácico, abdomen agudo, traumatismo…)
+en TC, Rx y ecografía, con su pedido de guardia.
+
 ## Roles
 
 | Rol | Ve |
