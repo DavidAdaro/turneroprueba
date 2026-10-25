@@ -73,22 +73,17 @@ recetario manuscrito con firma y sello, marcado **PEDIDO FICTICIO**.
 ## Datos e imágenes de ejemplo
 
 En el **Turnero del día**, el administrador tiene el botón **Cargar turnos de
-ejemplo (±3 semanas)**: agrega turnos ficticios de **resonancia, tomografía y
-rayos** desde 3 semanas atrás hasta 3 semanas adelante (unos 290 turnos de
-~100 pacientes inventados con DNI 9000xxxx), sin domingos y con solo rayos
-los sábados. Traen notas del turno, observaciones del paciente y del
-técnico, indicación, médico derivante e informes (firmados o en borrador).
-El estado depende del día: pasados → informados/entregados (con algún
-ausente o cancelado), hoy → según la hora, futuros → dados/confirmados.
-Se puede apretar más de una vez: no duplica.
+ejemplo (N pacientes, ±90 días)**: llena la agenda de **todos los equipos**
+desde 90 días atrás hasta 90 días adelante (ver "Agenda completa, sin
+huecos" más abajo). Se puede apretar más de una vez: no duplica.
 
 ### Con tus propios pacientes de prueba (solo local)
 
 Los turnos de ejemplo se generan **solo con tus pacientes** de
 `backend/demo-patients.local.json` (git lo ignora: **nunca se sube al
 repositorio**). `npm run setup` / `npm run reset-db` carga esos pacientes y
-el botón **Cargar turnos de ejemplo (N pacientes, ±3 semanas)** genera 2 o
-3 turnos por día desde 3 semanas atrás hasta 3 semanas adelante **solo con
+el botón **Cargar turnos de ejemplo (N pacientes, ±90 días)** genera 2 o
+3 turnos por día desde 90 días atrás hasta 90 días adelante **solo con
 ellos** (sin el archivo, avisa en vez de inventar pacientes), en todas las especialidades (RM, TC,
 Rx, ecografía y mamografía; ginecología y mamografía solo a mujeres; un
 marcapasos común nunca a RM). El formato está en
@@ -134,7 +129,7 @@ la URL de un visor real en Configuración → Centro, VM abre ese en su lugar.
 ### Agenda completa, sin huecos
 
 Con pacientes de la demo, el botón **Cargar turnos de ejemplo** ocupa
-**todos los horarios** de todos los equipos (de 3 semanas atrás a 3
+**todos los horarios** de todos los equipos (de 90 días atrás a 90
 adelante): los estudios largos toman varios slots seguidos y no se generan
 cancelados (dejarían el horario libre); queda algún que otro **ausente**.
 Los 15 pacientes de la demo aparecen todos los días y el resto se completa
