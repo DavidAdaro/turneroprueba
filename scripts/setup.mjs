@@ -31,8 +31,13 @@ function run(cmd, args, cwd) {
 }
 
 // 1. Dependencias
+// Se instala también si después de un pull apareció una dependencia nueva.
+const missingDeps = (dir) => {
+  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+  return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).some((d) => !existsSync(join(dir, 'node_modules', d, 'package.json')));
+};
 for (const dir of [backend, frontend]) {
-  if (!existsSync(join(dir, 'node_modules'))) run('npm', ['install', '--no-audit', '--no-fund'], dir);
+  if (missingDeps(dir)) run('npm', ['install', '--no-audit', '--no-fund'], dir);
 }
 
 // 2. Secretos locales

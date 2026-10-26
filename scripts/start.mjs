@@ -1,17 +1,21 @@
 // Levanta backend (http://localhost:8788) y frontend (http://localhost:5180)
 // en una sola ventana. Ctrl+C corta los dos.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PORTS, inUse } from './ports.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const needsSetup = ['backend/node_modules', 'frontend/node_modules', 'backend/.dev.vars', 'backend/.wrangler/state/v3/d1'].some(
-  (p) => !existsSync(join(root, p))
-);
+// Falta algo (primera vez, o un pull trajo una dependencia nueva): corre setup.
+const missingDeps = (dir) => {
+  const pkg = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8'));
+  return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).some((d) => !existsSync(join(root, dir, 'node_modules', d, 'package.json')));
+};
+const needsSetup =
+  ['backend/.dev.vars', 'backend/.wrangler/state/v3/d1'].some((p) => !existsSync(join(root, p))) || missingDeps('backend') || missingDeps('frontend');
 if (needsSetup) {
-  console.log('Primera vez: preparando el proyecto (npm run setup)…');
+  console.log('Preparando el proyecto (npm run setup)…');
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'setup.mjs')], { stdio: 'inherit' });
   if (r.status !== 0) process.exit(r.status || 1);
 }
