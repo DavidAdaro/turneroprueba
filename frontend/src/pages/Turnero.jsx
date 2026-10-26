@@ -88,10 +88,11 @@ export default function Turnero() {
       return 0;
     }
   })();
-  // Turnos ficticios día por día, de 3 semanas atrás a 3 semanas adelante.
+  // Turnos ficticios día por día, de 90 días atrás a 90 días adelante.
   const loadDemo = async () => {
     setError('');
-    const days = Array.from({ length: 43 }, (_, i) => addDays(today(), i - 21)); // 3 semanas atrás y 3 adelante
+    const DEMO_DAYS = 90;
+    const days = Array.from({ length: DEMO_DAYS * 2 + 1 }, (_, i) => addDays(today(), i - DEMO_DAYS)); // 90 días atrás y 90 adelante
     let created = 0;
     try {
       for (const [i, d] of days.entries()) {
@@ -143,11 +144,11 @@ export default function Turnero() {
           {can('admin') && (
             <button
               className="flex items-center gap-1 rounded bg-sky-700 px-2 py-1 hover:bg-sky-600 disabled:opacity-60"
-              title={ownPatients ? 'Agrega turnos de todas las especialidades, de 3 semanas atrás a 3 semanas adelante, solo con los pacientes de backend/demo-patients.local.json' : 'Falta backend/demo-patients.local.json: crealo y corré npm run setup'}
+              title={ownPatients ? 'Agrega turnos de todas las especialidades, de 90 días atrás a 90 días adelante, solo con los pacientes de backend/demo-patients.local.json' : 'Falta backend/demo-patients.local.json: crealo y corré npm run setup'}
               disabled={!!progress}
               onClick={loadDemo}
             >
-              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : ownPatients ? `Cargar turnos de ejemplo (${ownPatients} pacientes, ±3 semanas)` : 'Cargar turnos de ejemplo (faltan mis pacientes)'}
+              <Sparkles size={14} /> {progress ? `Cargando… ${progress}` : ownPatients ? `Cargar turnos de ejemplo (${ownPatients} pacientes, ±90 días)` : 'Cargar turnos de ejemplo (faltan mis pacientes)'}
             </button>
           )}
         </div>
@@ -291,7 +292,7 @@ export default function Turnero() {
                   <td className={td}>{a.modality}</td>
                   {/* Aseguradora + orden médica */}
                   <td className={td}>
-                    <span title={`${orderSummary(a)}\n(click: ver pedido)`} className="relative inline-block cursor-pointer" onClick={() => window.open(`/pedido/${a.id}`, '_blank')}>
+                    <span title={`${orderSummary(a)}\n${a.order_received ? '(click: ver pedido escaneado)' : 'Falta pedido: se escanea al admitir'}`} className={`relative inline-block ${a.order_received ? 'cursor-pointer' : ''}`} onClick={() => a.order_received && window.open(`/pedido/${a.id}`, '_blank')}>
                       <FileText size={22} className="text-white/80" />
                       {!a.order_received && <span className="absolute top-0 right-0 h-2 w-2 bg-red-500" />}
                     </span>
@@ -381,7 +382,7 @@ export default function Turnero() {
         </table>
         {data && rows.length === 0 && (
           <p className="py-10 text-center text-white/50">
-            No hay turnos este día.{can('admin') ? ' Podés cargar turnos de ejemplo (±3 semanas) con el botón de arriba.' : ''}
+            No hay turnos este día.{can('admin') ? ' Podés cargar turnos de ejemplo (±90 días) con el botón de arriba.' : ''}
           </p>
         )}
       </div>

@@ -221,6 +221,14 @@ export async function createDemoAppointments(db, date, userId) {
   ]);
   const insuranceId = (code) => insurances.find((i) => i.code === code)?.id ?? null;
 
+  // Con pacientes de la demo: agenda completa sin huecos + emergencias.
+  {
+    const demoPool = await loadDemoPool(db);
+    if (demoPool) {
+      return fillDay(db, { date, offset, weekday, now, userId, pool: demoPool, equipment, studies, tech, radiologist, schedules, blocks });
+    }
+  }
+
   // Turnos del día: con pacientes propios, poolItems; si no, hoy la
   // plantilla completa y otros días ~75 % de los horarios con pacientes
   // rotados. Sábado solo rayos.
@@ -330,6 +338,8 @@ export async function createDemoAppointments(db, date, userId) {
     const started = ['in_progress', ...DONE].includes(status);
     const done = DONE.includes(status);
     const accession = admitted ? `${prefix}-${String(seq++).padStart(4, '0')}` : null;
+    // Pedido escaneado = recibido. Algunos turnos futuros todavía no lo mandaron: sin escaneo ni datos del pedido.
+    const orderIn = status !== 'given' || mix(offset, index + 7) % 6 !== 0;
 
     stmts.push(
       db
@@ -354,7 +364,7 @@ export async function createDemoAppointments(db, date, userId) {
           admitted ? `AUT-${date.replace(/-/g, '').slice(2)}${String(index + 1).padStart(2, '0')}` : null,
           item.ref,
           item.ind,
-          status === 'given' ? 0 : 1,
+          orderIn ? 1 : 0,
           turnNotes,
           status === 'cancelled' ? 'El paciente reprogramó por teléfono' : null,
           accession,
@@ -369,7 +379,7 @@ export async function createDemoAppointments(db, date, userId) {
           status === 'delivered' ? toUtc(date, plus(time, 300)) : null,
           status === 'delivered' ? 'Paciente' : null,
           userId,
-          ...orderFor(item, study, date, offset, index)
+          ...(orderIn ? orderFor(item, study, date, offset, index) : [null, null, null, null])
         )
     );
     // Informe firmado o borrador, enlazado por N° de acceso.
@@ -404,4 +414,238 @@ export async function createDemoAppointments(db, date, userId) {
   }
   if (stmts.length) await db.batch(stmts);
   return { created, skipped };
+}
+
+// ======================================================================
+// Agenda COMPLETA (sin huecos) + sobreturnos de emergencia espontáneos.
+// Se usa cuando hay pacientes de la demo (propios + ficticios). Cada
+// horario de cada equipo se ocupa; como cada paciente tiene un solo turno
+// por día, se completan con pacientes de relleno ficticios (DNI 903xxxxx).
+// ======================================================================
+
+const FILLER_SIZE = 500;
+export const FILLER_PATIENTS = Array.from({ length: FILLER_SIZE }, (_, i) => {
+  const female = i % 2 === 1;
+  const year = 1940 + ((i * 13) % 66);
+  const insurance = year < 1958 ? 'PAMI' : ['OSDE', 'SMG', 'APROSS', 'PART', 'APROSS', 'OSDE'][i % 6];
+  return {
+    dni: String(90300000 + i),
+    first_name: (female ? FIRST_F : FIRST_M)[(i * 7) % 15],
+    last_name: LAST[(i * 3 + Math.floor(i / 25)) % LAST.length],
+    birth_date: `${year}-${String(((i * 5) % 12) + 1).padStart(2, '0')}-${String(((i * 11) % 27) + 1).padStart(2, '0')}`,
+    sex: female ? 'F' : 'M',
+    insurance,
+    affiliate_number: insurance === 'PART' ? null : String(71000000 + i * 41),
+    weight_kg: 48 + ((i * 17) % 60),
+    conditions: conditionsForPool(i),
+    extra: 'Paciente de relleno (ficticio)',
+  };
+});
+
+// Datos por estudio (derivante, indicación, informe) para todo el catálogo.
+const STUDY_INFO = Object.fromEntries([...PLAN, ...EXTRA_PLAN].map((x) => [x.study, x]));
+STUDY_INFO['341004'] = { ref: 'Dr. Rossi', ind: 'Cefalea con signos de alarma', report: { findings: 'No se observan realces patológicos intra ni extraaxiales. Sistema ventricular de tamaño normal.', conclusion: 'TC de cerebro con contraste sin hallazgos patológicos.' } };
+STUDY_INFO['341005'] = { ref: 'Dr. Ibáñez', ind: 'Estadificación de lesión pulmonar', report: { findings: 'Lesión nodular de 14 mm en lóbulo inferior izquierdo con realce heterogéneo. Sin adenomegalias mediastinales.', conclusion: 'Nódulo pulmonar de 14 mm. Se sugiere correlación con PET-TC.' } };
+const FEMALE_ONLY = new Set(['180301', '430101']);
+
+// Emergencias espontáneas (sin turno previo, entran como sobreturno).
+const EMERGENCIES = [
+  { mod: 'CT', study: '341001', ind: 'Traumatismo de cráneo con pérdida de conocimiento', why: 'TEC en vía pública, Glasgow 14' },
+  { mod: 'CT', study: '341002', ind: 'Dolor torácico agudo, descartar TEP', why: 'disnea súbita y taquicardia' },
+  { mod: 'CT', study: '341003', ind: 'Abdomen agudo', why: 'dolor abdominal intenso con defensa' },
+  { mod: 'DX', study: '420101', ind: 'Disnea aguda, descartar neumotórax', why: 'dolor pleurítico tras esfuerzo' },
+  { mod: 'DX', study: '420301', ind: 'Traumatismo de rodilla', why: 'caída de altura, impotencia funcional' },
+  { mod: 'US', study: '180101', ind: 'Dolor en hipocondrio derecho, descartar colecistitis', why: 'Murphy positivo, fiebre' },
+];
+
+async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment, studies, tech, radiologist, schedules, blocks }) {
+  const { results: existing } = await db
+    .prepare(
+      `SELECT a.equipment_id, a.start_time, a.end_time, p.dni FROM appointments a JOIN patients p ON p.id = a.patient_id
+       WHERE a.date = ? AND a.status != 'cancelled'`
+    )
+    .bind(date)
+    .all();
+  const usedDni = new Set(existing.map((e) => e.dni));
+  const busy = existing.map((e) => ({ eq: e.equipment_id, s: toMinutes(e.start_time), e: toMinutes(e.end_time) }));
+  const isBusy = (eqId, s, e) => busy.some((b) => b.eq === eqId && b.s < e && s < b.e);
+
+  // Primero los pacientes de la demo (todos los días), después el relleno.
+  const rot = (arr, k) => arr.map((_, i) => arr[(i + k) % arr.length]);
+  const candidates = [...rot(pool, (offset * 3 + 300) % pool.length), ...rot(FILLER_PATIENTS, (offset * 37 + 5000) % FILLER_SIZE)];
+  const takePatient = (study, eq) => {
+    const p = candidates.find(
+      (c) => !usedDni.has(c.dni) && canDo(c.conditions || [], eq.modality) && (!FEMALE_ONLY.has(study.code) || c.sex === 'F')
+    );
+    if (p) usedDni.add(p.dni);
+    return p;
+  };
+
+  const planned = []; // { eq, study, patient, start, end, overbook, emergency }
+  let n = 0;
+  const saturday = weekday === 6;
+  for (const eq of equipment) {
+    const mods = studies.filter((s) => s.modality === eq.modality);
+    if (!mods.length) continue;
+    const dayBlocks = blocksForDate(blocks, eq.id, date);
+    for (const sc of schedulesForDate(schedules, eq.id, date).sort((x, y) => x.start_time.localeCompare(y.start_time))) {
+      const slot = sc.slot_minutes;
+      const end = toMinutes(sc.end_time);
+      for (let t = toMinutes(sc.start_time); t + slot <= end; t += slot) {
+        if (isBusy(eq.id, t, t + slot) || findBlock(dayBlocks, t, t + slot)) continue;
+        // Estudio al azar; si no entra en lo que queda libre, uno de un solo slot.
+        const order = rot(mods, mix(offset + eq.id * 13, n++) % mods.length);
+        let chosen = null;
+        for (const st of order) {
+          const k = Math.max(1, Math.ceil(st.duration_minutes / slot));
+          if (t + k * slot <= end && !isBusy(eq.id, t, t + k * slot) && !findBlock(dayBlocks, t, t + k * slot)) {
+            chosen = { st, k };
+            break;
+          }
+        }
+        if (!chosen) continue;
+        const patient = takePatient(chosen.st, eq);
+        if (!patient) continue;
+        const s = t;
+        const e = t + chosen.k * slot;
+        busy.push({ eq: eq.id, s, e });
+        planned.push({ eq, study: chosen.st, patient, start: fromMinutes(s), end: fromMinutes(e), overbook: false, emergency: null });
+        t = e - slot; // el for suma un slot
+      }
+    }
+  }
+
+  // Sobreturnos de emergencia espontáneos (encima de la agenda llena).
+  const nEmerg = saturday ? 1 + (mix(offset + 77, 1) % 2) : 2 + (mix(offset + 77, 1) % 4);
+  for (let i = 0; i < nEmerg; i++) {
+    let em = EMERGENCIES[mix(offset + 81, i) % EMERGENCIES.length];
+    if (saturday && em.mod !== 'DX' && em.mod !== 'US') em = EMERGENCIES[3 + (i % 3)];
+    const eqs = equipment.filter((x) => x.modality === em.mod);
+    const eq = eqs[mix(offset + 83, i) % eqs.length];
+    const study = studies.find((x) => x.code === em.study);
+    const scs = schedulesForDate(schedules, eq?.id, date);
+    if (!eq || !study || !scs.length) continue;
+    const sc = scs[mix(offset + 85, i) % scs.length];
+    const span = toMinutes(sc.end_time) - toMinutes(sc.start_time) - study.duration_minutes;
+    const s = toMinutes(sc.start_time) + 5 * Math.floor((mix(offset + 87, i) % Math.max(1, span)) / 5);
+    const patient = takePatient(study, eq);
+    if (!patient) continue;
+    planned.push({ eq, study, patient, start: fromMinutes(s), end: fromMinutes(s + study.duration_minutes), overbook: true, emergency: em });
+  }
+  if (!planned.length) return { created: 0, skipped: 0 };
+
+  // ---- Inserción en lotes (patients por subconsulta de DNI) ----
+  const firstAcc = await nextAccessionNumber(db, date);
+  const [prefix, firstSeq] = firstAcc.split('-');
+  let seq = Number(firstSeq);
+  const stmts = [];
+  const people = [...new Map(planned.map((x) => [x.patient.dni, x.patient])).values()];
+  for (const p of people) {
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO patients (dni, first_name, last_name, birth_date, sex, phone, insurance_id, affiliate_number, weight_kg, notes)
+           VALUES (?, ?, ?, ?, ?, ?, (SELECT id FROM insurances WHERE code = ?), ?, ?, ?) ON CONFLICT(dni) DO NOTHING`
+        )
+        .bind(p.dni, p.first_name, p.last_name, p.birth_date, p.sex, `5492610${p.dni.slice(-6)}`, p.insurance, p.affiliate_number, p.weight_kg, patientNotesFor(p.conditions || [], p.extra))
+    );
+  }
+
+  planned.forEach((x, idx) => {
+    const info = STUDY_INFO[x.study.code] || { ref: 'Dr. Ejemplo', ind: 'Control', report: { findings: 'Sin hallazgos significativos.', conclusion: 'Estudio sin alteraciones.' } };
+    const r = mix(offset + 7, idx + 300);
+    let status = statusFor(date, { time: x.start }, idx, now, r);
+    if (status === 'cancelled') status = DONE[idx % 3]; // sin cancelados: dejarían el horario libre (algún que otro ausente queda)
+    if (x.emergency && status === 'absent') status = 'reported'; // la guardia no falta
+    const admitted = ['arrived', 'in_progress', ...DONE].includes(status);
+    const started = ['in_progress', ...DONE].includes(status);
+    const done = DONE.includes(status);
+    const accession = admitted ? `${prefix}-${String(seq++).padStart(4, '0')}` : null;
+    const cond = conditionTexts(x.patient.conditions || [], { mod: x.eq.modality, contrast: !!x.study.contrast, zone: zoneOf(x.study.name) }, (k) => mix(offset + 31 * idx, k));
+    const em = x.emergency;
+    const genericNote = em
+      ? `EMERGENCIA ESPONTÁNEA desde guardia (${em.why}). Sin turno previo: atender como sobreturno, prioridad.`
+      : GENERIC_NOTES[mix(offset, idx + 50) % GENERIC_NOTES.length];
+    const genericTech = em ? 'Estudio urgente de guardia; informe preliminar comunicado al médico de guardia.' : GENERIC_TECH[x.eq.modality]?.[mix(offset, idx + 90) % 3];
+    const turnNotes = [cond.note, genericNote].filter(Boolean).join(' ') || null;
+    const techText = (cond.tech ? [cond.tech] : [genericTech]).filter(Boolean).join(' ') || null;
+    const ind = em ? em.ind : info.ind;
+    const ref = em ? `Guardia (Dr. ${['Rossi', 'Funes', 'Lagos', 'Videla'][idx % 4]})` : info.ref;
+    const [orderDate, license, code, orderText] = em
+      ? [date, `MP ${20000 + (idx % 9000)}`, `${x.study.code} x1`, `Pedido de guardia: ${x.study.name} URGENTE. ${em.ind}.`]
+      : orderFor({ ind, ref }, x.study, date, offset, idx);
+    // Pedido escaneado = recibido. Algunos turnos futuros todavía no lo mandaron: sin escaneo ni datos del pedido.
+    const orderIn = em || status !== 'given' || mix(offset, idx + 7) % 6 !== 0;
+
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO appointments (equipment_id, patient_id, study_id, date, start_time, end_time, status, overbook, care_type,
+            insurance_id, authorization_number, referring_physician, clinical_indication, order_received, notes,
+            accession_number, study_instance_uid, pacs_status, image_count, technician_id, technician_notes,
+            arrived_at, started_at, completed_at, delivered_at, delivered_to, created_by,
+            order_date, order_physician_license, order_code, order_observations)
+           VALUES (?, (SELECT id FROM patients WHERE dni = ?), ?, ?, ?, ?, ?, ?, ?,
+            (SELECT insurance_id FROM patients WHERE dni = ?), ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          x.eq.id,
+          x.patient.dni,
+          x.study.id,
+          date,
+          x.start,
+          x.end,
+          status,
+          x.overbook ? 1 : 0,
+          em ? 'GUA' : r % 11 === 0 ? 'INT' : 'AMB',
+          x.patient.dni,
+          admitted ? `AUT-${date.replace(/-/g, '').slice(2)}${String(idx + 1).padStart(3, '0')}` : null,
+          ref,
+          ind,
+          orderIn ? 1 : 0,
+          turnNotes,
+          accession,
+          admitted ? newDicomUid() : null,
+          done ? 'received' : 'pending',
+          done ? ({ DX: 2, MG: 4 }[x.eq.modality] ?? { MR: 240, CT: 380, US: 18 }[x.eq.modality] + (r % 60)) : null,
+          started ? tech?.id ?? null : null,
+          done ? techText : null,
+          admitted ? toUtc(date, plus(x.start, em ? -3 : -12)) : null,
+          started ? toUtc(date, plus(x.start, em ? 2 : 4)) : null,
+          done ? toUtc(date, plus(x.start, x.study.duration_minutes + 6)) : null,
+          status === 'delivered' ? toUtc(date, plus(x.start, 300)) : null,
+          status === 'delivered' ? 'Paciente' : null,
+          userId,
+          orderIn ? orderDate : null,
+          orderIn ? license : null,
+          orderIn ? code : null,
+          orderIn ? orderText : null
+        )
+    );
+    if (done && info.report) {
+      const signed = status !== 'completed';
+      const findings = [cond.report, info.report.findings].filter(Boolean).join(' ');
+      stmts.push(
+        db
+          .prepare(
+            `INSERT INTO reports (appointment_id, radiologist_id, technique, findings, conclusion, status, signed_at)
+             SELECT id, ?, ?, ?, ?, ?, ? FROM appointments WHERE accession_number = ?`
+          )
+          .bind(radiologist?.id ?? null, `${x.study.name}.`, findings, signed ? info.report.conclusion : null, signed ? 'signed' : 'draft', signed ? toUtc(date, plus(x.start, 120)) : null, accession)
+      );
+    }
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO appointment_events (appointment_id, user_id, action, detail)
+           SELECT id, ?, 'created', ? FROM appointments WHERE equipment_id = ? AND date = ? AND start_time = ? AND patient_id = (SELECT id FROM patients WHERE dni = ?)`
+        )
+        .bind(userId, em ? 'Emergencia espontánea (sobreturno)' : 'Turno de ejemplo', x.eq.id, date, x.start, x.patient.dni)
+    );
+  });
+
+  // D1 limita el tamaño de cada lote: se envía de a 80 sentencias.
+  for (let i = 0; i < stmts.length; i += 80) await db.batch(stmts.slice(i, i + 80));
+  return { created: planned.length, emergencies: planned.filter((x) => x.emergency).length, skipped: 0 };
 }

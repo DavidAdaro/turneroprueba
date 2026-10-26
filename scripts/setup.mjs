@@ -129,7 +129,8 @@ if (poolFiles.length) {
   // recrear la base (--reset), para que no queden los de ejemplo del seed.
   if (onlyOwn || reset) {
     const dnis = pool.map((p) => q(String(p.dni).replace(/\D/g, ''))).join(', ');
-    const others = `SELECT id FROM patients WHERE dni NOT IN (${dnis})`;
+    // Se conservan también los pacientes de relleno ficticios de la agenda completa (DNI 903xxxxx).
+    const others = `SELECT id FROM patients WHERE dni NOT IN (${dnis}) AND dni NOT LIKE '903_____'`;
     const theirAppointments = `SELECT id FROM appointments WHERE patient_id IN (${others})`;
     const prune = join(backend, '.wrangler', 'prune.sql');
     writeFileSync(
@@ -138,7 +139,7 @@ if (poolFiles.length) {
         `DELETE FROM reports WHERE appointment_id IN (${theirAppointments});`,
         `DELETE FROM appointment_events WHERE appointment_id IN (${theirAppointments});`,
         `DELETE FROM appointments WHERE patient_id IN (${others});`,
-        `DELETE FROM patients WHERE dni NOT IN (${dnis});`,
+        `DELETE FROM patients WHERE dni NOT IN (${dnis}) AND dni NOT LIKE '903_____';`,
       ].join('\n')
     );
     d1('./.wrangler/prune.sql');

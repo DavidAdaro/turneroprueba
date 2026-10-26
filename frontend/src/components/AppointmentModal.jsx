@@ -121,7 +121,11 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
             <div>Fecha: {a.order_date ? a.order_date.split('-').reverse().join('/') : '—'} · Código: {a.order_code || '—'}</div>
             <div>Diagnóstico: {a.clinical_indication || '—'}</div>
             {a.order_observations && <div className="italic">“{a.order_observations}”</div>}
-            <Link to={`/pedido/${a.id}`} target="_blank" className="mt-0.5 inline-block text-blue-700 hover:underline">Ver pedido escaneado ↗</Link>
+            {a.order_received ? (
+              <Link to={`/pedido/${a.id}`} target="_blank" className="mt-0.5 inline-block text-blue-700 hover:underline">Ver pedido escaneado ↗</Link>
+            ) : (
+              <div className="mt-0.5 text-amber-700">Todavía no se recibió el pedido: se escanea al presentarlo (a más tardar al admitir).</div>
+            )}
             {a.requires_authorization ? <div>Autorización: {a.authorization_number || 'pendiente'}</div> : null}
           </div>
           {a.accession_number && (
