@@ -138,6 +138,28 @@ agregan **2 a 5 emergencias espontáneas por día** (1-2 los sábados) como
 sobreturno de guardia (TEC, dolor torácico, abdomen agudo, traumatismo…)
 en TC, Rx y ecografía, con su pedido de guardia.
 
+### Simulación en vivo
+
+En el Turnero, el administrador tiene el botón **Simular en vivo**. Encendido
+(muestra **EN VIVO hh:mm**), los turnos de **hoy** avanzan solos según la
+hora real, en todos los equipos:
+
+| Momento | Qué pasa |
+| --- | --- |
+| 12 min antes del turno | Recepción lo admite: escanea el pedido si faltaba, autorización y N° de acceso. |
+| Hora de inicio | El técnico lo ingresa a sala (*en curso*). |
+| Hora de fin | Finaliza; las imágenes llegan al PACS (simulado) con observación del técnico. |
+| ~45 min después (15 en guardia) | El informante firma el informe. |
+| ~2 h 30 después | Se entrega al paciente. |
+
+Algún que otro paciente no se presenta (queda *ausente* a los 20 min) y a lo
+largo del día llegan **emergencias espontáneas** desde la guardia como
+sobreturno. Si se enciende a media mañana, se pone al día de una con lo que
+ya debería haber pasado (los horarios registrados son los del turno). Corre
+como mucho cada 15 s, disparada por cualquier pantalla abierta (el Turnero
+refresca solo); queda encendida aunque se reinicie, hasta apagarla con el
+mismo botón. Para que haya actividad tiene que haber turnos cargados hoy.
+
 ## Roles
 
 | Rol | Ve |

@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Monitor,
   PauseCircle,
+  Radio,
   Pill,
   Plus,
   RefreshCw,
@@ -70,10 +71,27 @@ export default function Turnero() {
   const [error, setError] = useState('');
   const { data, reload } = useData(() => api.listAppointments({ from: date, to: date, modality: modality || undefined }), [date, modality]);
 
+  // Simulación en vivo: el backend hace avanzar los turnos de hoy según la
+  // hora real; el Turnero refresca más seguido mientras está encendida.
+  const [live, setLive] = useState(false);
+  const [clock, setClock] = useState('');
   useEffect(() => {
-    const t = setInterval(reload, 30000);
+    api.getLive().then((r) => setLive(r.live)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    const tick = () => {
+      reload();
+      setClock(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    };
+    tick();
+    const t = setInterval(tick, live ? 15000 : 30000);
     return () => clearInterval(t);
-  }, [reload]);
+  }, [reload, live]);
+  const toggleLive = () =>
+    act(async () => {
+      const r = await api.setLive(!live);
+      setLive(r.live);
+    });
 
   const rows = useMemo(() => (data || []).filter((a) => !hideCancelled || a.status !== 'cancelled'), [data, hideCancelled]);
   const counts = useMemo(() => (data || []).reduce((c, a) => ({ ...c, [a.status]: (c[a.status] || 0) + 1 }), {}), [data]);
@@ -137,6 +155,17 @@ export default function Turnero() {
           <input type="checkbox" checked={hideCancelled} onChange={(e) => setHideCancelled(e.target.checked)} /> Ocultar cancelados
         </label>
         <div className="ml-auto flex gap-2">
+          {can('admin') ? (
+            <button
+              className={`flex items-center gap-1 rounded px-2 py-1 ${live ? 'bg-red-600 hover:bg-red-500' : 'bg-white/10 hover:bg-white/20'}`}
+              title="Simula la actividad de hoy en tiempo real: admisión, inicio y fin de cada estudio a su horario, informe, entrega, ausentes y emergencias de guardia"
+              onClick={toggleLive}
+            >
+              <Radio size={14} className={live ? 'animate-pulse' : ''} /> {live ? `EN VIVO ${clock}` : 'Simular en vivo'}
+            </button>
+          ) : (
+            live && <span className="flex items-center gap-1 rounded bg-red-600 px-2 py-1"><Radio size={14} className="animate-pulse" /> EN VIVO {clock}</span>
+          )}
           <button className="flex items-center gap-1 rounded bg-white/10 px-2 py-1 hover:bg-white/20" onClick={reload}><RefreshCw size={14} /> Actualizar</button>
           {can('admin', 'reception') && (
             <button className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 hover:bg-emerald-500" onClick={() => navigate(`/turnos?date=${date}`)}><Plus size={14} /> Nuevo turno</button>

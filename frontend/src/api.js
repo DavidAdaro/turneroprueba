@@ -83,6 +83,8 @@ export const api = {
   revokeApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
 
   createDemoAppointments: (date) => request('/demo/appointments', { method: 'POST', body: { date } }),
+  getLive: () => request('/demo/live'),
+  setLive: (live) => request('/demo/live', { method: 'PUT', body: { live } }),
 
   getStats: (from, to) => request(`/stats${qs({ from, to })}`),
   getBilling: (from, to, insuranceId) => request(`/stats/billing${qs({ from, to, insurance_id: insuranceId })}`),

@@ -90,7 +90,7 @@ const EXTRA_PLAN = [
   { mod: 'MG', study: '430101', time: '09:40', care: 'AMB', ref: 'Dra. Paredes', ind: 'Control mamario anual', notes: null, tech: null, sex: 'F', report: { findings: 'Mamas de densidad tipo B. No se observan nódulos, microcalcificaciones sospechosas ni distorsiones de la arquitectura.', conclusion: 'BI-RADS 1. Control anual.' } },
 ];
 
-const GENERIC_TECH = {
+export const GENERIC_TECH = {
   MR: ['Protocolo completo sin incidencias.', 'Paciente colaborador, sin artefactos de movimiento.', 'Se agregó secuencia adicional a pedido del médico.'],
   CT: ['Adquisición sin incidencias.', 'Cortes finos con reconstrucciones multiplanares.', 'Paciente colaborador.'],
   DX: ['Proyecciones de rutina sin repeticiones.', 'Se repitió una proyección por movimiento.', 'Paciente en bipedestación.'],
@@ -443,13 +443,13 @@ export const FILLER_PATIENTS = Array.from({ length: FILLER_SIZE }, (_, i) => {
 });
 
 // Datos por estudio (derivante, indicación, informe) para todo el catálogo.
-const STUDY_INFO = Object.fromEntries([...PLAN, ...EXTRA_PLAN].map((x) => [x.study, x]));
+export const STUDY_INFO = Object.fromEntries([...PLAN, ...EXTRA_PLAN].map((x) => [x.study, x]));
 STUDY_INFO['341004'] = { ref: 'Dr. Rossi', ind: 'Cefalea con signos de alarma', report: { findings: 'No se observan realces patológicos intra ni extraaxiales. Sistema ventricular de tamaño normal.', conclusion: 'TC de cerebro con contraste sin hallazgos patológicos.' } };
 STUDY_INFO['341005'] = { ref: 'Dr. Ibáñez', ind: 'Estadificación de lesión pulmonar', report: { findings: 'Lesión nodular de 14 mm en lóbulo inferior izquierdo con realce heterogéneo. Sin adenomegalias mediastinales.', conclusion: 'Nódulo pulmonar de 14 mm. Se sugiere correlación con PET-TC.' } };
 const FEMALE_ONLY = new Set(['180301', '430101']);
 
 // Emergencias espontáneas (sin turno previo, entran como sobreturno).
-const EMERGENCIES = [
+export const EMERGENCIES = [
   { mod: 'CT', study: '341001', ind: 'Traumatismo de cráneo con pérdida de conocimiento', why: 'TEC en vía pública, Glasgow 14' },
   { mod: 'CT', study: '341002', ind: 'Dolor torácico agudo, descartar TEP', why: 'disnea súbita y taquicardia' },
   { mod: 'CT', study: '341003', ind: 'Abdomen agudo', why: 'dolor abdominal intenso con defensa' },

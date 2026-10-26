@@ -15,6 +15,7 @@ import stats from './routes/stats';
 import integration from './routes/integration';
 import apiKeys from './routes/apiKeys';
 import demo from './routes/demo';
+import { maybeRunLive } from './utils/live';
 
 const app = new Hono();
 
@@ -22,6 +23,13 @@ app.use('/api/*', async (c, next) => {
   // Las rutas de integración las llaman servidores, no navegadores.
   if (c.req.path.startsWith('/api/integration')) return next();
   return cors({ origin: c.env.CORS_ORIGIN || '*' })(c, next);
+});
+
+// Simulación en vivo (si está encendida): antes de responder, los turnos de
+// hoy avanzan según la hora real.
+app.use('/api/*', async (c, next) => {
+  if (c.req.path !== '/api/health') await maybeRunLive(c.env.DB);
+  return next();
 });
 
 app.get('/api/health', (c) => c.json({ status: 'ok' }));
