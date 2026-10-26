@@ -124,7 +124,7 @@ export default function AppointmentModal({ id, initialMode = null, onClose, onCh
             {a.order_received ? (
               <Link to={`/pedido/${a.id}`} target="_blank" className="mt-0.5 inline-block text-blue-700 hover:underline">Ver pedido escaneado ↗</Link>
             ) : (
-              <div className="mt-0.5 text-amber-700">Falta el pedido en papel: se escanea al admitir en recepción.</div>
+              <div className="mt-0.5 text-amber-700">Todavía no se recibió el pedido: se escanea al presentarlo (a más tardar al admitir).</div>
             )}
             {a.requires_authorization ? <div>Autorización: {a.authorization_number || 'pendiente'}</div> : null}
           </div>

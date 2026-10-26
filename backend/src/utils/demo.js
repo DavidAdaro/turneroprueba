@@ -338,6 +338,8 @@ export async function createDemoAppointments(db, date, userId) {
     const started = ['in_progress', ...DONE].includes(status);
     const done = DONE.includes(status);
     const accession = admitted ? `${prefix}-${String(seq++).padStart(4, '0')}` : null;
+    // Pedido escaneado = recibido. Algunos turnos futuros todavía no lo mandaron: sin escaneo ni datos del pedido.
+    const orderIn = status !== 'given' || mix(offset, index + 7) % 6 !== 0;
 
     stmts.push(
       db
@@ -362,7 +364,7 @@ export async function createDemoAppointments(db, date, userId) {
           admitted ? `AUT-${date.replace(/-/g, '').slice(2)}${String(index + 1).padStart(2, '0')}` : null,
           item.ref,
           item.ind,
-          status === 'given' ? 0 : 1,
+          orderIn ? 1 : 0,
           turnNotes,
           status === 'cancelled' ? 'El paciente reprogramó por teléfono' : null,
           accession,
@@ -377,7 +379,7 @@ export async function createDemoAppointments(db, date, userId) {
           status === 'delivered' ? toUtc(date, plus(time, 300)) : null,
           status === 'delivered' ? 'Paciente' : null,
           userId,
-          ...orderFor(item, study, date, offset, index)
+          ...(orderIn ? orderFor(item, study, date, offset, index) : [null, null, null, null])
         )
     );
     // Informe firmado o borrador, enlazado por N° de acceso.
@@ -572,6 +574,8 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
     const [orderDate, license, code, orderText] = em
       ? [date, `MP ${20000 + (idx % 9000)}`, `${x.study.code} x1`, `Pedido de guardia: ${x.study.name} URGENTE. ${em.ind}.`]
       : orderFor({ ind, ref }, x.study, date, offset, idx);
+    // Pedido escaneado = recibido. Algunos turnos futuros todavía no lo mandaron: sin escaneo ni datos del pedido.
+    const orderIn = em || status !== 'given' || mix(offset, idx + 7) % 6 !== 0;
 
     stmts.push(
       db
@@ -599,7 +603,7 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
           admitted ? `AUT-${date.replace(/-/g, '').slice(2)}${String(idx + 1).padStart(3, '0')}` : null,
           ref,
           ind,
-          em || status !== 'given' ? 1 : 0,
+          orderIn ? 1 : 0,
           turnNotes,
           accession,
           admitted ? newDicomUid() : null,
@@ -613,10 +617,10 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
           status === 'delivered' ? toUtc(date, plus(x.start, 300)) : null,
           status === 'delivered' ? 'Paciente' : null,
           userId,
-          orderDate,
-          license,
-          code,
-          orderText
+          orderIn ? orderDate : null,
+          orderIn ? license : null,
+          orderIn ? code : null,
+          orderIn ? orderText : null
         )
     );
     if (done && info.report) {
