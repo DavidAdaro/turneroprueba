@@ -292,7 +292,7 @@ export default function Turnero() {
                   <td className={td}>{a.modality}</td>
                   {/* Aseguradora + orden médica */}
                   <td className={td}>
-                    <span title={`${orderSummary(a)}\n(click: ver pedido)`} className="relative inline-block cursor-pointer" onClick={() => window.open(`/pedido/${a.id}`, '_blank')}>
+                    <span title={`${orderSummary(a)}\n${a.order_received ? '(click: ver pedido escaneado)' : 'Falta pedido: se escanea al admitir'}`} className={`relative inline-block ${a.order_received ? 'cursor-pointer' : ''}`} onClick={() => a.order_received && window.open(`/pedido/${a.id}`, '_blank')}>
                       <FileText size={22} className="text-white/80" />
                       {!a.order_received && <span className="absolute top-0 right-0 h-2 w-2 bg-red-500" />}
                     </span>
