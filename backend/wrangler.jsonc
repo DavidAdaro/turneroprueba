@@ -3,6 +3,12 @@
   "main": "src/index.js",
   "compatibility_date": "2024-09-23",
   "compatibility_flags": ["nodejs_compat"],
+  // Para importar la tipografía (.ttf) de GET /api/integration/order-image
+  // como datos binarios (ver src/assets/Caveat-Regular.ttf) — resvg no
+  // tiene ninguna fuente del sistema disponible en el sandbox de Workers
+  // (no hay sistema operativo con fuentes instaladas), así que el texto se
+  // renderiza en blanco sin esto.
+  "rules": [{ "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }],
   "vars": {
     // Origen del frontend. En desarrollo se permite cualquiera.
     "CORS_ORIGIN": "*"

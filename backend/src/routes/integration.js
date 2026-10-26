@@ -1,9 +1,16 @@
 import { Hono } from 'hono';
+import { Resvg } from '@cf-wasm/resvg';
 import { readJson, toInt } from '../utils/http';
 import { APPOINTMENT_SELECT, logEvent } from '../utils/agenda';
 import { isDate, nowLocal } from '../utils/time';
 import { SCOPES, hashApiKey, parseScopes } from '../utils/apiKeys';
 import { MODALITIES } from './equipment';
+import { buildOrderImageSvg } from '../utils/orderImageSvg';
+// Datos binarios de la tipografía (ver wrangler.jsonc, regla Data para
+// **/*.ttf) — resvg no tiene ninguna fuente del sistema disponible en el
+// sandbox de Workers, así que hay que pasarle una propia o el texto se
+// renderiza en blanco.
+import caveatFont from '../assets/Caveat-Regular.ttf';
 
 // Endpoints para sistemas externos (InPatient, PACS, broker de worklist),
 // servidor a servidor. Autenticación por header X-API-Key con una key
@@ -279,6 +286,49 @@ integration.get('/schedule', requireScope('schedule:read'), async (c) => {
       report_status: a.report_status,
     })),
   });
+});
+
+// Foto (PNG) del pedido médico de UN turno puntual, para que un sistema
+// externo (p. ej. InPatient) pueda probar su lectura por IA sin que nadie
+// suba una foto a mano. Mismo permiso que /equipment y /studies
+// (schedule:read, es consulta/catálogo, no dato clínico nuevo). Busca la
+// cita exacta por fecha + equipo + hora + DNI (mismos filtros que
+// /schedule, más start_time y dni) y arma una imagen "manuscrita
+// ficticia" a partir de los datos que ya tiene cargados — ver
+// utils/orderImageSvg.js, a propósito MÁS SIMPLE que la vista
+// "Ver pedido escaneado" del staff (sin filtros SVG, que resvg —el motor
+// de rasterizado que corre acá, @cf-wasm/resvg— no tiene garantizado
+// soportar). Sin match exacto, 404 claro: no inventa una imagen de un
+// turno que no existe.
+integration.get('/order-image', requireScope('schedule:read'), async (c) => {
+  const db = c.env.DB;
+  const date = c.req.query('date');
+  const time = c.req.query('time');
+  const dni = (c.req.query('dni') || '').replace(/\D/g, '');
+  if (!date || !isDate(date)) return c.json({ error: 'date inválida: usar AAAA-MM-DD' }, 400);
+  if (!time) return c.json({ error: 'time es requerido (HH:MM)' }, 400);
+  if (!dni) return c.json({ error: 'dni es requerido' }, 400);
+
+  const params = [date, time, dni];
+  let where = 'a.date = ? AND a.start_time = ? AND p.dni = ?';
+  const byName = (c.req.query('equipment') || '').trim();
+  if (byName) {
+    const eq = await db.prepare('SELECT id FROM equipment WHERE lower(name) = lower(?)').bind(byName).first();
+    if (!eq) return c.json({ error: `No existe el equipo "${byName}"` }, 404);
+    where += ' AND a.equipment_id = ?';
+    params.push(eq.id);
+  }
+
+  const appointment = await db.prepare(`${APPOINTMENT_SELECT} WHERE ${where} LIMIT 1`).bind(...params).first();
+  if (!appointment) return c.json({ error: 'No se encontró ningún turno con esos datos' }, 404);
+
+  const svg = buildOrderImageSvg(appointment);
+  const png = (
+    await Resvg.async(svg, { background: '#fbf8ef', font: { fontBuffers: [new Uint8Array(caveatFont)], defaultFontFamily: 'Caveat' } })
+  )
+    .render()
+    .asPng();
+  return new Response(png, { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' } });
 });
 
 // Paciente por DNI con sus observaciones y el historial de estudios
