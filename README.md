@@ -136,7 +136,24 @@ Los 15 pacientes de la demo aparecen todos los días y el resto se completa
 con **pacientes de relleno ficticios** (DNI 903xxxxx, ~500). Además se
 agregan **2 a 5 emergencias espontáneas por día** (1-2 los sábados) como
 sobreturno de guardia (TEC, dolor torácico, abdomen agudo, traumatismo…)
-en TC, Rx y ecografía, con su pedido de guardia.
+en TC, Rx y ecografía, con su pedido de guardia (solo en días pasados y hoy
+hasta la hora actual: una emergencia no se conoce de antemano), y **3 a 6
+sobreturnos comunes** por día (1-2 los sábados) encima de turnos ocupados.
+
+### Demoras
+
+Cada equipo (consola) atiende de a uno: un estudio empieza a su hora o
+cuando el equipo se libera, lo que pase después. Los estudios duran entre
+90 % y 125 % de lo previsto, y ~3 % tiene un imprevisto que lo alarga 15 a
+35 min (claustrofobia, reinicio del equipo, reacción al contraste…, anotado
+en la observación del técnico). Así los **sobreturnos, las emergencias y los
+estudios largos generan demora** que se arrastra hasta que la absorbe un
+ausente o el corte del mediodía; la guardia pasa primero. En el Turnero:
+
+- columna **Demora**: `+12'` = empezó 12 min tarde; `esp. 20'` = admitido
+  y esperando hace 20 min (verde < 10, amarillo < 30, rojo ≥ 30);
+- arriba, **Demora por consola** (hoy): cuánto lleva esperando el paciente
+  más atrasado de cada equipo, o *al día*.
 
 ### Simulación en vivo
 
@@ -147,7 +164,7 @@ hora real, en todos los equipos:
 | Momento | Qué pasa |
 | --- | --- |
 | 12 min antes del turno | Recepción lo admite: escanea el pedido si faltaba, autorización y N° de acceso. |
-| Hora de inicio | El técnico lo ingresa a sala (*en curso*). |
+| Cuando el equipo se libera (no antes de su hora) | El técnico lo ingresa a sala (*en curso*). |
 | Hora de fin | Finaliza; las imágenes llegan al PACS (simulado) con observación del técnico. |
 | ~45 min después (15 en guardia) | El informante firma el informe. |
 | ~2 h 30 después | Se entrega al paciente. |

@@ -39,6 +39,24 @@ const CARE_LABELS = { AMB: 'Ambulatorio', INT: 'Internado', GUA: 'Guardia' };
 // Hora local 'HH:MM' de un timestamp UTC de SQLite.
 const hhmm = (ts) =>
   ts ? new Date(`${ts.replace(' ', 'T')}Z`).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+// Minutos del día (hora local) de un timestamp UTC de SQLite o de 'HH:MM'.
+const tsMin = (ts) => {
+  const d = new Date(`${ts.replace(' ', 'T')}Z`);
+  return d.getHours() * 60 + d.getMinutes();
+};
+const hmMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const nowMin = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
+// Demora de un turno: cuánto después de su hora empezó, o (si hoy sigue
+// esperando admitido) cuánto lleva esperando. null si no corresponde.
+function delayOf(a) {
+  if (a.started_at) return tsMin(a.started_at) - hmMin(a.start_time);
+  if (a.date === today() && a.status === 'arrived') return nowMin() - hmMin(a.start_time);
+  return null;
+}
+const delayColor = (m) => (m >= 30 ? 'bg-red-600' : m >= 10 ? 'bg-amber-500 text-black' : 'bg-emerald-700');
 const userCode = (email) => (email ? email.split('@')[0].toUpperCase().slice(0, 9) : '');
 const dmy = (d) => (d ? d.split('-').reverse().join('/') : '');
 
@@ -96,6 +114,22 @@ export default function Turnero() {
   const rows = useMemo(() => (data || []).filter((a) => !hideCancelled || a.status !== 'cancelled'), [data, hideCancelled]);
   const counts = useMemo(() => (data || []).reduce((c, a) => ({ ...c, [a.status]: (c[a.status] || 0) + 1 }), {}), [data]);
   const modalities = [...new Set(equipment.map((e) => e.modality))];
+  // Demora actual por consola (solo hoy): lo que lleva esperando el paciente
+  // admitido que ya debería haber entrado; si nadie espera, al día.
+  const consoleDelays = useMemo(() => {
+    if (date !== today()) return [];
+    const by = new Map();
+    for (const a of data || []) {
+      if (!by.has(a.equipment_name)) by.set(a.equipment_name, { name: a.equipment_name, modality: a.modality, delay: 0, waiting: 0 });
+      const c = by.get(a.equipment_name);
+      if (a.status === 'arrived' && !a.started_at && hmMin(a.start_time) <= nowMin()) {
+        c.waiting++;
+        c.delay = Math.max(c.delay, nowMin() - hmMin(a.start_time));
+      }
+    }
+    return [...by.values()].sort((x, y) => x.name.localeCompare(y.name));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, date, clock]);
   const clinic = (settings?.clinic_name || 'CENTRO').split(' ')[0].toUpperCase().slice(0, 9);
 
   const [progress, setProgress] = useState('');
@@ -191,6 +225,20 @@ export default function Turnero() {
           </span>
         ))}
       </div>
+      {consoleDelays.length > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-white/60">Demora por consola:</span>
+          {consoleDelays.map((c) => (
+            <span
+              key={c.name}
+              className={`rounded px-2 py-0.5 ${delayColor(c.delay)}`}
+              title={c.waiting ? `${c.waiting} paciente(s) esperando que ya deberían haber entrado` : 'Sin pacientes atrasados'}
+            >
+              {c.name}: <b>{c.delay >= 5 ? `${c.delay} min` : 'al día'}</b>
+            </span>
+          ))}
+        </div>
+      )}
       {error && <div className="mb-2 rounded bg-red-600 px-3 py-1.5 text-sm">{error}</div>}
 
       <div className="overflow-x-auto">
@@ -211,6 +259,7 @@ export default function Turnero() {
               <th className="px-1">Hora Turno</th>
               <th className="px-1">Arribo</th>
               <th className="px-1">Inicio</th>
+              <th className="px-1">Demora</th>
               <th className="px-1">Usuario</th>
               <th className="px-1">Fin</th>
               <th className="px-1">Usuario</th>
@@ -336,6 +385,17 @@ export default function Turnero() {
                   </td>
                   <td className={td}>{hhmm(a.arrived_at) || (a.status === 'absent' ? 'AUS' : ':')}</td>
                   <td className={td}>{hhmm(a.started_at) || ':'}</td>
+                  <td className={td}>
+                    {(() => {
+                      const d = delayOf(a);
+                      if (d == null || d < 5) return '';
+                      return (
+                        <span className={`whitespace-nowrap rounded px-1 font-medium ${delayColor(d)}`} title={a.started_at ? `Empezó ${d} min después de su turno` : `Lleva ${d} min esperando`}>
+                          {a.started_at ? `+${d}'` : `esp. ${d}'`}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className={td}>{a.started_at ? userCode(a.technician_email) : ''}</td>
                   <td className={td}>{hhmm(a.completed_at) || ':'}</td>
                   <td className={td}>{a.completed_at ? userCode(a.technician_email) : ''}</td>

@@ -1,7 +1,9 @@
 // Simulación en vivo: hace avanzar los turnos de HOY según la hora real del
 // centro, como si recepción, técnicos e informantes trabajaran solos:
-//   admisión ~12 min antes → inicio del estudio a su hora → fin a su hora
-//   (imágenes al PACS) → informe firmado ~45 min después → entrega.
+//   admisión ~12 min antes → inicio del estudio cuando el equipo se libera →
+//   fin (imágenes al PACS) → informe firmado ~45 min después → entrega.
+// Cada equipo atiende de a uno (utils/queue.js): los sobreturnos, las
+// emergencias y los estudios que se alargan generan demora en esa consola.
 // Algún que otro paciente no se presenta, y a lo largo del día entran
 // emergencias espontáneas desde la guardia como sobreturno.
 // Se activa con settings.demo_live = '1' y corre como mucho cada 15 s,
@@ -9,6 +11,7 @@
 import { EMERGENCIES, GENERIC_TECH, STUDY_INFO } from './demo';
 import { logEvent } from './agenda';
 import { newDicomUid, simulatePacsReception } from './pacs';
+import { runQueue, studyRun } from './queue';
 import { fromMinutes, nowLocal, toMinutes } from './time';
 
 const EVERY_MS = 15000;
@@ -49,11 +52,11 @@ export async function runLive(db, now = nowLocal()) {
 
   const { results } = await db
     .prepare(
-      `SELECT a.*, s.code AS study_code, s.name AS study_name, e.modality, i.requires_authorization,
+      `SELECT a.*, s.code AS study_code, s.name AS study_name, s.duration_minutes AS study_minutes, e.modality, i.requires_authorization,
               (SELECT COUNT(*) FROM reports r WHERE r.appointment_id = a.id) AS has_report
        FROM appointments a JOIN studies s ON s.id = a.study_id JOIN equipment e ON e.id = a.equipment_id
        LEFT JOIN insurances i ON i.id = a.insurance_id
-       WHERE a.date = ? AND a.status NOT IN ('cancelled', 'absent', 'delivered')`
+       WHERE a.date = ? AND a.status NOT IN ('cancelled', 'absent')`
     )
     .bind(date)
     .all();
@@ -62,11 +65,32 @@ export async function runLive(db, now = nowLocal()) {
   const last = await db.prepare('SELECT MAX(accession_number) AS n FROM appointments WHERE accession_number LIKE ?').bind(`${prefix}-%`).first();
   let seq = last?.n ? Number(last.n.split('-')[1]) : 0;
 
+  // Horario real de cada estudio, equipo por equipo. Los que no se van a
+  // presentar no ocupan el equipo; lo ya registrado (inicio/fin) se respeta.
+  const dayStart = Date.parse(`${date}T00:00:00-03:00`);
+  const localMin = (ts) => (ts ? Math.round((Date.parse(`${ts.replace(' ', 'T')}Z`) - dayStart) / 60000) : null);
+  const noShow = (a) => !a.overbook && hash(a.id) < 55 && (a.status === 'given' || a.status === 'confirmed');
+  const real = new Map();
+  for (const eqId of new Set(results.map((a) => a.equipment_id))) {
+    const items = results
+      .filter((a) => a.equipment_id === eqId && !noShow(a))
+      .map((a) => ({
+        key: a.id,
+        s: toMinutes(a.start_time),
+        dur: studyRun(a.study_minutes, a.id * 7919).dur,
+        urgent: a.care_type === 'GUA',
+        overbook: !!a.overbook,
+        start: localMin(a.started_at),
+        end: localMin(a.completed_at),
+      }));
+    for (const [k, v] of runQueue(items)) real.set(k, v);
+  }
+
   const stmts = [];
   const counts = { admitted: 0, started: 0, completed: 0, reported: 0, delivered: 0, absent: 0, emergencies };
   for (const a of results) {
+    if (a.status === 'delivered') continue;
     const s = toMinutes(a.start_time);
-    const e = toMinutes(a.end_time);
     const urgent = a.care_type === 'GUA';
     let status = a.status;
     const step = (sql, values, action, detail) => {
@@ -75,8 +99,7 @@ export async function runLive(db, now = nowLocal()) {
     };
 
     if (status === 'given' || status === 'confirmed') {
-      const noShow = !a.overbook && hash(a.id) < 55;
-      if (noShow) {
+      if (noShow(a)) {
         if (t >= s + ABSENT_AFTER) {
           step("status = 'absent'", [], 'absent', 'No se presentó (simulación en vivo)');
           counts.absent++;
@@ -100,14 +123,21 @@ export async function runLive(db, now = nowLocal()) {
       status = 'arrived';
       counts.admitted++;
     }
-    if (status === 'arrived' && t >= s) {
-      step("status = 'in_progress', started_at = ?, technician_id = ?", [toUtc(date, s), tech?.id ?? null], 'start', null);
+    const { start: rs, end: e } = real.get(a.id);
+    if (status === 'arrived' && t >= rs) {
+      step("status = 'in_progress', started_at = ?, technician_id = ?", [toUtc(date, rs), tech?.id ?? null], 'start', rs > s + 4 ? `Demora ${rs - s} min` : null);
       status = 'in_progress';
       counts.started++;
     }
     if (status === 'in_progress' && t >= e) {
       const sim = simulatePacsReception(a.modality);
-      const note = a.technician_notes || (urgent ? 'Estudio urgente de guardia; informe preliminar comunicado al médico de guardia.' : GENERIC_TECH[a.modality]?.[a.id % 3] ?? null);
+      const incident = studyRun(a.study_minutes, a.id * 7919).incident;
+      const note =
+        a.technician_notes ||
+        [urgent ? 'Estudio urgente de guardia; informe preliminar comunicado al médico de guardia.' : GENERIC_TECH[a.modality]?.[a.id % 3], incident && `Se demoró ${incident.minutes} min: ${incident.why}.`]
+          .filter(Boolean)
+          .join(' ') ||
+        null;
       step(
         "status = 'completed', completed_at = ?, pacs_status = ?, image_count = ?, technician_notes = ?",
         [toUtc(date, e), sim.pacs_status, sim.image_count, note],
@@ -149,7 +179,7 @@ export async function runLive(db, now = nowLocal()) {
 
 // Emergencias espontáneas: en cada hora de atención (8 a 19) hay ~40 % de
 // chance de que llegue una desde la guardia, a un minuto fijo de esa hora.
-// Se crean cuando llega ese minuto, una sola vez.
+// Se crean cuando llega ese minuto (si la simulación está corriendo), una sola vez.
 async function addEmergencies(db, date, t, userId) {
   const day = Number(date.replace(/-/g, ''));
   const due = [];
@@ -157,7 +187,8 @@ async function addEmergencies(db, date, t, userId) {
     const r = hash(day * 31 + h);
     if (r >= 400) continue;
     const min = h * 60 + 5 + (r % 50);
-    if (min <= t) due.push({ min, em: EMERGENCIES[r % EMERGENCIES.length] });
+    // Solo las recientes: las de antes ya las cargó el generador de ejemplo.
+    if (min <= t && min >= t - 15) due.push({ min, em: EMERGENCIES[r % EMERGENCIES.length] });
   }
   if (!due.length) return 0;
 

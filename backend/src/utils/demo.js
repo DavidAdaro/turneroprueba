@@ -2,6 +2,7 @@ import { nextAccessionNumber, newDicomUid } from './pacs';
 import { fromMinutes, nowLocal, toMinutes } from './time';
 import { blocksForDate, findBlock, schedulesForDate } from './slots';
 import { canDo, conditionTexts, conditionsForPool, patientNotesFor, zoneOf } from './demoConditions';
+import { runQueue, studyRun } from './queue';
 
 // Datos 100 % ficticios para probar el RIS: pacientes (DNI 9000xxxx),
 // turnos de RM, TC y Rx con notas, observaciones e informes. Las imágenes
@@ -458,6 +459,14 @@ export const EMERGENCIES = [
   { mod: 'US', study: '180101', ind: 'Dolor en hipocondrio derecho, descartar colecistitis', why: 'Murphy positivo, fiebre' },
 ];
 
+const OVERBOOK_REASONS = [
+  'Sobreturno autorizado por jefatura: paciente oncológico, control urgente.',
+  'Sobreturno a pedido del médico derivante (resultado para cirugía).',
+  'Sobreturno: paciente del interior, viaja hoy.',
+  'Sobreturno: reprogramado por falla del equipo la semana pasada.',
+  'Sobreturno: internado con alta prevista mañana.',
+];
+
 async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment, studies, tech, radiologist, schedules, blocks }) {
   const { results: existing } = await db
     .prepare(
@@ -528,11 +537,74 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
     const sc = scs[mix(offset + 85, i) % scs.length];
     const span = toMinutes(sc.end_time) - toMinutes(sc.start_time) - study.duration_minutes;
     const s = toMinutes(sc.start_time) + 5 * Math.floor((mix(offset + 87, i) % Math.max(1, span)) / 5);
+    // Una emergencia no se conoce de antemano: en días futuros (y más tarde
+    // que ahora, hoy) no hay; las de hoy las agrega la simulación en vivo.
+    if (date > now.date || (date === now.date && s > toMinutes(now.time))) continue;
     const patient = takePatient(study, eq);
     if (!patient) continue;
     planned.push({ eq, study, patient, start: fromMinutes(s), end: fromMinutes(s + study.duration_minutes), overbook: true, emergency: em });
   }
+
+  // Sobreturnos comunes (dados de antemano, encima de un turno ya ocupado):
+  // 3 a 6 por día hábil, 1-2 los sábados. Corren a los turnos que siguen.
+  const regular = planned.filter((x) => !x.overbook);
+  const nOver = regular.length ? (saturday ? 1 + (mix(offset + 95, 1) % 2) : 3 + (mix(offset + 95, 1) % 4)) : 0;
+  for (let i = 0; i < nOver; i++) {
+    const base = regular[mix(offset + 97, i) % regular.length];
+    const short = studies.filter((x) => x.modality === base.eq.modality && !x.contrast).sort((a, b) => a.duration_minutes - b.duration_minutes);
+    const study = short[mix(offset + 99, i) % Math.min(2, short.length)];
+    if (!study) continue;
+    const patient = takePatient(study, base.eq);
+    if (!patient) continue;
+    const s = toMinutes(base.start);
+    const reason = OVERBOOK_REASONS[mix(offset + 101, i) % OVERBOOK_REASONS.length];
+    planned.push({ eq: base.eq, study, patient, start: base.start, end: fromMinutes(s + study.duration_minutes), overbook: true, emergency: null, reason });
+  }
   if (!planned.length) return { created: 0, skipped: 0 };
+
+  // ---- Estado de cada turno y horario real (con demoras) ----
+  const nowMin = toMinutes(now.time);
+  const isToday = date === now.date;
+  const pending = (r) => (r < 350 ? 'given' : 'confirmed');
+  const day = Number(date.replace(/-/g, ''));
+  const plan = planned.map((x, idx) => {
+    const r = mix(offset + 7, idx + 300);
+    let status = statusFor(date, { time: x.start }, idx, now, r);
+    if (status === 'cancelled') status = DONE[idx % 3]; // sin cancelados: dejarían el horario libre (algún que otro ausente queda)
+    if (x.emergency && status === 'absent') status = 'reported'; // la guardia no falta
+    const noShow = isToday ? !x.emergency && r < 60 : status === 'absent';
+    const run = studyRun(x.study.duration_minutes, day * 1009 + idx);
+    return { r, status, noShow, dur: run.dur, incident: run.incident };
+  });
+  // Cada equipo atiende de a uno: los sobreturnos y los estudios que se
+  // alargan corren a los siguientes (ver utils/queue.js).
+  const real = new Map();
+  if (date <= now.date) {
+    for (const eq of equipment) {
+      const items = [];
+      planned.forEach((x, idx) => {
+        if (x.eq.id === eq.id && !plan[idx].noShow) {
+          items.push({ key: idx, s: toMinutes(x.start), dur: plan[idx].dur, urgent: !!x.emergency, overbook: x.overbook });
+        }
+      });
+      for (const [k, v] of runQueue(items)) real.set(k, v);
+    }
+  }
+  // Hoy el estado sale de la hora real de cada estudio, no de la del turno.
+  if (isToday) {
+    planned.forEach((x, idx) => {
+      const p = plan[idx];
+      const s = toMinutes(x.start);
+      const q = real.get(idx);
+      if (p.noShow) p.status = nowMin >= s + 20 ? 'absent' : pending(p.r);
+      else if (!x.emergency && nowMin >= q.end + 150) p.status = 'delivered';
+      else if (nowMin >= q.end + (x.emergency ? 15 : 45)) p.status = 'reported';
+      else if (nowMin >= q.end) p.status = 'completed';
+      else if (nowMin >= q.start) p.status = 'in_progress';
+      else if (nowMin >= s - (x.emergency ? 3 : 12)) p.status = 'arrived';
+      else p.status = pending(p.r);
+    });
+  }
 
   // ---- Inserción en lotes (patients por subconsulta de DNI) ----
   const firstAcc = await nextAccessionNumber(db, date);
@@ -553,10 +625,8 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
 
   planned.forEach((x, idx) => {
     const info = STUDY_INFO[x.study.code] || { ref: 'Dr. Ejemplo', ind: 'Control', report: { findings: 'Sin hallazgos significativos.', conclusion: 'Estudio sin alteraciones.' } };
-    const r = mix(offset + 7, idx + 300);
-    let status = statusFor(date, { time: x.start }, idx, now, r);
-    if (status === 'cancelled') status = DONE[idx % 3]; // sin cancelados: dejarían el horario libre (algún que otro ausente queda)
-    if (x.emergency && status === 'absent') status = 'reported'; // la guardia no falta
+    const { r, status } = plan[idx];
+    const q = real.get(idx);
     const admitted = ['arrived', 'in_progress', ...DONE].includes(status);
     const started = ['in_progress', ...DONE].includes(status);
     const done = DONE.includes(status);
@@ -565,10 +635,12 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
     const em = x.emergency;
     const genericNote = em
       ? `EMERGENCIA ESPONTÁNEA desde guardia (${em.why}). Sin turno previo: atender como sobreturno, prioridad.`
-      : GENERIC_NOTES[mix(offset, idx + 50) % GENERIC_NOTES.length];
+      : x.reason || GENERIC_NOTES[mix(offset, idx + 50) % GENERIC_NOTES.length];
     const genericTech = em ? 'Estudio urgente de guardia; informe preliminar comunicado al médico de guardia.' : GENERIC_TECH[x.eq.modality]?.[mix(offset, idx + 90) % 3];
     const turnNotes = [cond.note, genericNote].filter(Boolean).join(' ') || null;
-    const techText = (cond.tech ? [cond.tech] : [genericTech]).filter(Boolean).join(' ') || null;
+    const incident = plan[idx].incident;
+    const techText =
+      [...(cond.tech ? [cond.tech] : [genericTech]), incident && `Se demoró ${incident.minutes} min: ${incident.why}.`].filter(Boolean).join(' ') || null;
     const ind = em ? em.ind : info.ind;
     const ref = em ? `Guardia (Dr. ${['Rossi', 'Funes', 'Lagos', 'Videla'][idx % 4]})` : info.ref;
     const [orderDate, license, code, orderText] = em
@@ -612,9 +684,9 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
           started ? tech?.id ?? null : null,
           done ? techText : null,
           admitted ? toUtc(date, plus(x.start, em ? -3 : -12)) : null,
-          started ? toUtc(date, plus(x.start, em ? 2 : 4)) : null,
-          done ? toUtc(date, plus(x.start, x.study.duration_minutes + 6)) : null,
-          status === 'delivered' ? toUtc(date, plus(x.start, 300)) : null,
+          started ? toUtc(date, fromMinutes(q.start)) : null,
+          done ? toUtc(date, fromMinutes(Math.min(1439, q.end))) : null,
+          status === 'delivered' ? toUtc(date, fromMinutes(Math.min(1439, q.end + 150))) : null,
           status === 'delivered' ? 'Paciente' : null,
           userId,
           orderIn ? orderDate : null,
@@ -632,7 +704,7 @@ async function fillDay(db, { date, offset, weekday, now, userId, pool, equipment
             `INSERT INTO reports (appointment_id, radiologist_id, technique, findings, conclusion, status, signed_at)
              SELECT id, ?, ?, ?, ?, ?, ? FROM appointments WHERE accession_number = ?`
           )
-          .bind(radiologist?.id ?? null, `${x.study.name}.`, findings, signed ? info.report.conclusion : null, signed ? 'signed' : 'draft', signed ? toUtc(date, plus(x.start, 120)) : null, accession)
+          .bind(radiologist?.id ?? null, `${x.study.name}.`, findings, signed ? info.report.conclusion : null, signed ? 'signed' : 'draft', signed ? toUtc(date, fromMinutes(Math.min(1439, q.end + (em ? 15 : 45)))) : null, accession)
       );
     }
     stmts.push(
