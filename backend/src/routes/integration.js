@@ -323,11 +323,30 @@ integration.get('/order-image', requireScope('schedule:read'), async (c) => {
   if (!appointment) return c.json({ error: 'No se encontró ningún turno con esos datos' }, 404);
 
   const svg = buildOrderImageSvg(appointment);
-  const png = (
-    await Resvg.async(svg, { background: '#fbf8ef', font: { fontBuffers: [new Uint8Array(caveatFont)], defaultFontFamily: 'Caveat' } })
-  )
-    .render()
-    .asPng();
+  // Sin este try/catch, cualquier falla acá (panic de resvg, un SVG que
+  // termina siendo demasiado grande, el font buffer, lo que sea) pasaba
+  // sin capturar hasta el catch-all genérico de index.js, que responde
+  // {error: "Error interno del servidor"} — EXACTAMENTE el mismo texto
+  // literal que el catch-all de InPatient usa para sus propios crashes no
+  // relacionados. Reportado como un caso real e indistinguible del otro:
+  // InPatient relaya este mensaje tal cual (ver fetchOrderImage en su
+  // utils/risAdapters/miniRis.js), así que un fallo acá y un fallo allá se
+  // veían exactamente igual del lado del administrativo, sin forma de
+  // saber cuál de los dos servidores rompió. Ahora, si el rasterizado
+  // falla, se loguea el motivo real (`console.error`, visible en
+  // `wrangler tail`) y se responde un mensaje específico de ESTE paso, no
+  // el genérico.
+  let png;
+  try {
+    png = (
+      await Resvg.async(svg, { background: '#fbf8ef', font: { fontBuffers: [new Uint8Array(caveatFont)], defaultFontFamily: 'Caveat' } })
+    )
+      .render()
+      .asPng();
+  } catch (err) {
+    console.error('order-image: no se pudo rasterizar el SVG a PNG:', err);
+    return c.json({ error: 'No se pudo generar la imagen del pedido médico (falló el rasterizado).' }, 500);
+  }
   return new Response(png, { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' } });
 });
 
